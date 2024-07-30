@@ -14,7 +14,7 @@ ds2 <- read.csv(file = './0_data/rwa_sdo_revisited_study_1b.csv',
 
 
 #get codebook
-cdbk_1b <- openxlsx::read.xlsx("./three_challenges_codebook.xlsx", sheet = 2) %>%
+cdbk_1b <- openxlsx::read.xlsx("./0_data/three_challenges_codebook.xlsx", sheet = 2) %>%
   mutate(variable = tolower(variable))
 
 
@@ -23,7 +23,8 @@ cdbk_1b <- openxlsx::read.xlsx("./three_challenges_codebook.xlsx", sheet = 2) %>
 ## RWA ----
 
 #RWA items
-rwa.itms <- c("au01_01","au01_02","au01_03","au01_04","au01_05","au01_06","au01_07","au01_08","au01_09")
+rwa.itms <- 
+  ds2 %>% select(starts_with("au01")) %>% names()
 
 #factor analysis
 fa_rwa <- factanal(na.omit(ds2[,rwa.itms]), factors = 1, rotation = "varimax")
@@ -40,8 +41,8 @@ ds2$rwa <- rowMeans(ds2[,rwa.itms], na.rm = TRUE)
 ## SDO ----
 
 #sdo items
-sdo.itms <- c("sd01_01","sd01_02","sd01_03","sd01_04","sd01_05","sd01_06","sd01_07","sd01_08",
-              "sd01_09","sd01_10","sd01_11","sd01_12","sd01_13","sd01_14","sd01_15","sd01_16")
+sdo.itms <- 
+  ds2 %>% select(starts_with("sd01")) %>% names()
 
 #factor analysis
 fa_sdo <- factanal(na.omit(ds2[,sdo.itms]), factors = 2, rotation = "varimax")
@@ -66,9 +67,7 @@ ds2 <-
 
 #conservatism items
 con.itms <- 
-  ds2 %>%
-  select(starts_with("ko01")) %>%
-  names(.)
+  ds2 %>% select(starts_with("ko01")) %>% names()
 
 #alpha
 psych::alpha(ds2[,con.itms], check.keys = T)
@@ -80,9 +79,7 @@ ds2$con <- rowMeans(ds2[,con.itms],na.rm = TRUE)
 
 #meritocracy items
 mi.itms <- 
-  ds2 %>%
-  select(starts_with("me01")) %>%
-  names()
+  ds2 %>% select(starts_with("me01")) %>% names()
 
 fa_mi <- factanal(na.omit(ds2[,mi.itms]), factors = 2, rotation = "varimax")
 fa_mi
@@ -96,7 +93,8 @@ ds2$mi<-rowMeans(ds2[,mi.itms], na.rm = TRUE)
 
 ## POLITICAL SELF-PLACEMENT ----
 
-ds2$polid <- ds2$de03_01
+ds2 <- ds2 %>%
+  rename("polid" = "de03_01")
 
 
 # DV: TARGETS ----
@@ -300,27 +298,25 @@ ds2 %>%
 lm_int <- 
   ds2 %>%
   select(case,rwa,sdo,all_of(trgt.itms)) %>%
-  mutate(rwa_scl = scale(rwa),
-         sdo_scl = scale(sdo)) %>%
-  tidyr::pivot_longer(cols = rich:officials,
+  tidyr::pivot_longer(cols = all_of(trgt.itms),
                       names_to  = "target",
                       values_to = "rating") %>%
-  mutate(trgt_fct = case_when(target %in% ta_rght.itms ~ "right",
+  mutate(rwa_scl  = as.numeric(scale(rwa)),
+         sdo_scl  = as.numeric(scale(sdo)),
+         trgt_fct = case_when(target %in% ta_rght.itms ~ "right",
                               target %in% ta_lft.itms ~ "left")) 
 
-m1 <- lm(rating ~ rwa*trgt_fct, data = lm_int)
+m1 <- lm(rating ~ rwa_scl*trgt_fct, data = lm_int)
 summary(m1)
 
-m2 <- lm(rating ~ sdo*trgt_fct, data = lm_int)
+m2 <- lm(rating ~ sdo_scl*trgt_fct, data = lm_int)
 summary(m2)
 
 lm_int %>%
-  mutate(rwa = scale(rwa),
-         sdo = scale(sdo)) %>%
-  tidyr::pivot_longer(cols = c(rwa,sdo), 
+  tidyr::pivot_longer(cols = c(rwa,rwa_scl,sdo,sdo_scl), 
                       names_to = "scale",
                       values_to = "score") %>%
+  filter(scale == "rwa_scl"|scale == "sdo_scl") %>%
   ggplot(aes(y = rating, x = score,color = trgt_fct)) +
   geom_smooth(se = FALSE, method = lm) +
   facet_wrap(~scale)
-
