@@ -261,35 +261,22 @@ rbind(
 ## SAMPLE SPLIT ----
 
 ds2 %>%
-  select(case,all_of(prdctrs),all_of(trgt.itms)) %>%
-  tidyr::pivot_longer(cols = all_of(prdctrs), names_to = "scale",values_to = "score") %>%
-  tidyr::pivot_longer(cols = all_of(trgt.itms), names_to = "target",values_to = "rating") %>%
+  select(case,rwa,sdo,all_of(trgt.itms)) %>%
+  tidyr::pivot_longer(cols = 4:ncol(.),names_to = "target",values_to = "rating") %>%
+  tidyr::pivot_longer(cols = 2:3,names_to = "scale",values_to = "value") %>%
   group_by(scale) %>%
-  mutate(
-    mean   = mean(score,   na.rm = T),
-    median = median(score, na.rm = T),
-    sd     = sd(score,     na.rm = T),
-    mean_splt = case_when(score > mean ~ "high",
-                          score < mean ~ "low"),
-    median_splt = case_when(score > median ~ "high",
-                            score < median ~ "low"),
-    sd1 = case_when(score > mean+sd ~ "high",
-                    score < mean-sd ~ "low"),
-    sd2 = case_when(score > mean+(2*sd) ~ "high",
-                    score < mean-(2*sd) ~ "low")) %>%
+  mutate(hilo = case_when(value > median(value,na.rm = T) ~ "high",
+                          TRUE ~ "low")) %>%
   ungroup() %>%
-  ### aggregate prejudice target means by scale
-  tidyr::pivot_longer(cols = c(mean_splt,median_splt,sd1,sd2),
-                      names_to = "splt_scale", values_to = "hgh_low") %>%
-  group_by(scale,target,splt_scale,hgh_low) %>%
-  summarise(pjdce_splt = mean(rating, na.rm = T)) %>%
-  filter(!is.na(hgh_low)) %>%
-  tidyr::pivot_wider(names_from = hgh_low, values_from = "pjdce_splt") %>%
-  mutate(splt_scale = stringr::str_remove_all(splt_scale,"_splt")) %>%
-  ungroup() %>%
-  ### correlate
-  group_by(scale,splt_scale) %>% 
-  summarize(cor=cor(high, low)) 
+  group_by(target,scale,hilo) %>%
+  summarise(m = mean(rating,na.rm = T)) %>%
+  tidyr::pivot_wider(names_from = "hilo",  values_from = m) %>%
+  mutate(diff = abs(high-low)) %>%
+  group_by(scale) %>%
+  summarise(m = mean(diff),
+            sd = sd(diff),
+            r = cor(high,low,method = "pearson"))
+
 
 
 
