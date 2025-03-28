@@ -3,7 +3,9 @@ rm(list = ls())
 library(dplyr)
 library(ggplot2)
 
-#get data----
+# DATA WRANGLING ----
+
+## get data----
 ds1 <- read.csv('https://osf.io/ywpq4/download', 
                 header = TRUE, sep = ",", as.is = T, na.strings = c("-9",NA)) %>%
   janitor::clean_names(.)
@@ -18,17 +20,28 @@ cdbk_1a <- openxlsx::read.xlsx("./0_data/three_challenges_codebook.xlsx", sheet 
   mutate(variable = tolower(variable))
 
 
-# IV: SCALES ----
+rename_vars.1a <- setNames(cdbk_1a %>%
+                             pull(variable_label),
+                           cdbk_1a %>%
+                             pull(variable))
 
-## RWA ----
+ds1 <- ds1 %>%
+  rename_with(~ rename_vars.1a[.],.cols = all_of(names(rename_vars.1a)))
+
+
+## PREDICTORS ----
+
+prdctrs <- c("rwa","sdo","con","mi","polid")
+
+### RWA ----
 
 #RWA items
 rwa.itms <- 
-  ds1 %>% select(starts_with("au01")) %>% names()
+  ds1 %>% select(starts_with("rwa_")) %>% names()
 
 #factor analysis
-fa_rwa <- factanal(na.omit(ds1[,rwa.itms]), factors = 1, rotation = "varimax")
-fa_rwa
+fa_rwa.1a <- factanal(na.omit(ds1[,rwa.itms]), factors = 1, rotation = "varimax")
+fa_rwa.1a
 
 
 #alpha
@@ -38,15 +51,15 @@ psych::alpha(ds1[,rwa.itms])
 ds1$rwa <- rowMeans(ds1[,rwa.itms], na.rm = TRUE)
 
 
-## SDO ----
+### SDO ----
 
 #sdo items
 sdo.itms <- 
-  ds1 %>% select(starts_with("sd01")) %>% names()
+  ds1 %>% select(starts_with("sdo_")) %>% names()
 
 #factor analysis
-fa_sdo <- factanal(na.omit(ds1[,sdo.itms]), factors = 2, rotation = "varimax")
-fa_sdo
+fa_sdo.1a <- factanal(na.omit(ds1[,sdo.itms]), factors = 2, rotation = "varimax")
+fa_sdo.1a
 
 #alpha
 psych::alpha(ds1[,sdo.itms])
@@ -54,7 +67,7 @@ psych::alpha(ds1[,sdo.itms])
 #score
 ds1$sdo <- rowMeans(ds1[,sdo.itms], na.rm = TRUE)
 
-## CONSERVATISM ----
+### CONSERVATISM ----
 
 #recode items
 
@@ -62,12 +75,12 @@ ds1 <-
   ds1 %>% 
   mutate(across(c(cdbk_1a %>%
                     filter(scale == "Conservatism" & coding == "reversed") %>%
-                    select(variable) %>% pull()), ~ 12 - .))
+                    select(variable_label) %>% pull()), ~ 12 - .))
 
 
 #conservatism items
 con.itms <- 
-  ds1 %>% select(starts_with("ko01")) %>% names()
+  ds1 %>% select(starts_with("con_")) %>% names()
 
 #alpha
 psych::alpha(ds1[,con.itms], check.keys = T)
@@ -75,14 +88,14 @@ psych::alpha(ds1[,con.itms], check.keys = T)
 #score
 ds1$con <- rowMeans(ds1[,con.itms],na.rm = TRUE)
 
-## MERITOCRACY ----
+### MERITOCRACY ----
 
 #meritocracy items
 mi.itms <- 
-  ds1 %>% select(starts_with("mi01")) %>% names()
+  ds1 %>% select(starts_with("mi_")) %>% names()
 
-fa_mi <- factanal(na.omit(ds1[,mi.itms]), factors = 2, rotation = "varimax")
-fa_mi
+fa_mi.1a <- factanal(na.omit(ds1[,mi.itms]), factors = 2, rotation = "varimax")
+fa_mi.1a
 
 #alpha
 psych::alpha(ds1[,mi.itms])
@@ -91,102 +104,80 @@ psych::alpha(ds1[,mi.itms])
 ds1$mi<-rowMeans(ds1[,mi.itms], na.rm = TRUE)
 
 
-## POLITICAL SELF-PLACEMENT ----
-
-ds1 <- ds1 %>%
-  rename("polid" = "de03_01")
-
-
-# DV: TARGETS ----
+## DV: TARGETS ----
 
 #recode
-ds1 <- ds1 %>% mutate(across(matches("ta01_"), ~ 12 - .))
+ds1 <- ds1 %>% mutate(across(starts_with("prj_"), ~ 12 - .))
 
-#rename
-rename_trgts <- setNames(cdbk_1a %>%
-                           filter(scale == "Prejudice") %>%
-                           pull(english_item_translation) %>% janitor::make_clean_names(),
-                         cdbk_1a %>%
-                           filter(scale == "Prejudice") %>%
-                           pull(variable))
-
-ds1 <- ds1 %>%
-  rename_with(~ rename_trgts[.],.cols = all_of(names(rename_trgts)))
 
 #Targets
-trgt.itms <- 
-  cdbk_1a %>%
-  filter(scale == "Prejudice") %>%
-  pull(english_item_translation) %>% 
-  janitor::make_clean_names()
+trgt.itms.1a <- 
+  ds1 %>%
+  select(starts_with("prj_")) %>%
+  names()
 
-### PCA & FACTOR ANALYSIS -----
+### FACTOR ANALYSIS -----
 
-## PCA
+psych::fa.parallel(ds1 %>% select(starts_with("prj_")))
 
-pca_targets <- cor(ds1[trgt.itms], use = "pairwise", method = "pearson")
-pca_targets <- princomp(covmat = pca_targets)
-plot(pca_targets, type = "lines", main = "PCA prejudice targets")
-summary(pca_targets)
+fa_trgts.1a <- 
+  psych::fa(ds1 %>%
+              select(starts_with("prj_")), 
+            nfactors = 2, 
+            rotate = "oblimin", 
+            fm = "ml")
 
-## Factor analysis
-fa_trgts <- factanal(na.omit(ds1[trgt.itms]), factors = 2, rotation = "varimax")
-fa_trgts
-
-fa_trgts <-
-  loadings(fa_trgts)[] %>%
+fa_trgts.1a <- 
+  loadings(fa_trgts.1a)[] %>%
   data.frame() %>%
-  mutate(Factor1     = case_when(Factor1 > Factor2 ~ Factor1),
-         Factor2     = case_when(is.na(Factor1) ~ Factor2),
-         trgt_factor = as.factor(case_when(is.na(Factor1) ~ "liberal",
+  mutate(ML2     = case_when(ML2 > ML1 ~ ML2),
+         ML1     = case_when(is.na(ML2) ~ ML1),
+         trgt_factor = as.factor(case_when(is.na(ML2) ~ "liberal",
                                            TRUE ~ "conservative")))
 
-table(fa_trgts$trgt_factor)
+sjPlot::tab_fa(ds1 %>%
+                  select(starts_with("prj_")), 
+                nmbr.fctr = 2, 
+                rotation = "oblimin",
+               method = "ml",
+               file = "./2_tables/fa_study_1a.html")
 
 ### AGGREGATE ----
 
 #LIBERAL TARGETS
 
 #item index
-ta_lft.itms <- 
-  fa_trgts %>%
+ta_lib.itms.1a <- 
+  fa_trgts.1a %>%
   filter(trgt_factor == "liberal") %>%
   row.names()
 
 #alpha
-psych::alpha(ds1[ta_lft.itms])
+psych::alpha(ds1[ta_lib.itms.1a])
 
 #mean
-ds1$ta_lft  <- rowMeans(ds1[ta_lft.itms], na.rm = T)
+ds1$ta_lib  <- rowMeans(ds1[ta_lib.itms.1a], na.rm = T)
 
 #CONSERVATIVE TARGETS
 
 #item index
-ta_rght.itms <-
-  fa_trgts %>%
+ta_con.itms.1a <-
+  fa_trgts.1a %>%
   filter(trgt_factor == "conservative") %>%
   row.names()
 
 #alpha
-psych::alpha(ds1[,ta_rght.itms])
+psych::alpha(ds1[,ta_con.itms.1a])
 
 #mean
-ds1$ta_rght <- rowMeans(ds1[ta_rght.itms], na.rm = T)
+ds1$ta_con <- rowMeans(ds1[ta_con.itms.1a], na.rm = T)
 
 
 # ANALYSES ----
 
-## predictor descriptives ----
+## INCONSISTENT PREDICTION ----
 
-prdctrs <- c("rwa","sdo","con","mi","polid")
-
-psych::describe(ds1$rwa)   # descriptives rwa
-psych::describe(ds1$sdo)   # descriptives sdo
-psych::describe(ds1$con)   # descriptives conservatism
-psych::describe(ds1$mi)    # descriptives meritocracy
-psych::describe(ds1$polid) # descriptives political self-placement
-
-##predictor bivariate rs ----
+### BIVARIATE CORRELATIONS ----
 
 ds1 %>%
   select(all_of(prdctrs)) %>%
@@ -194,19 +185,21 @@ ds1 %>%
   rstatix::cor_mark_significant(cutpoints = c(0, 0.001, 0.01, 0.05, 1),
                                 symbols = c("***", "**", "*", ""))
   
-## single targets rs ----
 
-biv_r <- matrix(nrow = length(trgt.itms), ncol = length(prdctrs))
-rownames(biv_r) <- trgt.itms
-colnames(biv_r) <- prdctrs
+biv_r <- matrix(nrow = length(trgt.itms.1a), ncol = 4)
+rownames(biv_r) <- trgt.itms.1a
+colnames(biv_r) <- c("rwa","rwa.p","sdo","sdo.p")
+rwa_sdo <- c("rwa","sdo")
 
 # Loop through each pair of predictor and target variable
-for (tgt in trgt.itms) {
-  for (prd in prdctrs) {
+for (tgt in trgt.itms.1a) {
+  for (prd in rwa_sdo) {
     # Perform correlation test
     test_result <- cor.test(ds1[[prd]], ds1[[tgt]])
     # Store the p-value in the results matrix
     biv_r[tgt, prd] <- round(test_result$estimate,2)
+    biv_r[tgt, paste0(prd,".p")] <- round(test_result$p.value,3)
+    
   }
 }
 
@@ -216,52 +209,158 @@ biv_r %>%
   tibble::as_tibble() %>%
   arrange(rwa) %>% print(n = 40)
 
-
-## aggregated targets rs ----
+### Correlations Target Factors
 
 ds1 %>%
-  select(all_of(prdctrs),ta_lft,ta_rght) %>%
+  select(all_of(rwa_sdo),ta_lib,ta_con) %>%
   rstatix::cor_mat() %>%
   rstatix::cor_mark_significant(cutpoints = c(0, 0.001, 0.01, 0.05, 1),
                                 symbols = c("***", "**", "*", ""))
 
-## partial correlations -----
+### PARTIAL CORRELATIONS -----
 
 rbind(
   ds1 %>%
-    select(rwa,sdo,ta_rght,ta_lft) %>% 
+    select(rwa,sdo,ta_con,ta_lib) %>% 
     cor(use = "pairwise") %>% 
     data.frame() %>%
     tibble::rownames_to_column("target_scale") %>%
     mutate(partial = "Bivariate"),
   ds1 %>%
-    select(rwa,sdo,ta_rght,ta_lft,con) %>% 
+    select(rwa,sdo,ta_con,ta_lib,polid) %>% 
     psych::partial.r(.,1:4,5) %>% 
     data.frame() %>%
     tibble::rownames_to_column("target_scale") %>%
-    mutate(partial = "Conservatism"),
-  ds1 %>%
-    select(rwa,sdo,ta_rght,ta_lft,mi) %>% 
-    psych::partial.r(.,1:4,5) %>% 
-    data.frame() %>%
-    tibble::rownames_to_column("target_scale") %>%
-    mutate(partial = "Meritocracy"),
-  ds1 %>%
-    select(rwa,sdo,ta_rght,ta_lft,polid) %>% 
-    psych::partial.r(.,1:4,5) %>% 
-    data.frame() %>%
-    tibble::rownames_to_column("target_scale") %>%
-    mutate(partial = "ideologica_slf_plcmnt")
+    mutate(partial = "pol_slf_plcmnt")
 ) %>%
-  filter(target_scale == "ta_lft"|target_scale == "ta_rght") %>%
+  filter(target_scale == "ta_lib"|target_scale == "ta_con") %>%
   select(target_scale,rwa,sdo,partial) %>%
-  tidyr::pivot_wider(names_from = "target_scale", values_from = c("rwa","sdo"))
+  tidyr::pivot_wider(names_from = "partial", values_from = c("rwa","sdo"))
 
 
-## SAMPLE SPLIT ----
+## IDEOLOGICAL CONFLICT ----
+
+### Left-right interaction ----
 
 ds1 %>%
-  select(case,rwa,sdo,all_of(trgt.itms)) %>%
+  select(case,rwa,sdo,all_of(trgt.itms.1a)) %>%
+  tidyr::pivot_longer(cols = c(rwa,sdo),
+                      names_to  = "predictor",
+                      values_to = "score") %>%
+  tidyr::pivot_longer(cols = all_of(trgt.itms.1a),
+                      names_to  = "target",
+                      values_to = "rating") %>%
+  mutate(trgt_fct = case_when(target %in% ta_con.itms.1a ~ "right",
+                              target %in% ta_lib.itms.1a ~ "left")) %>%
+  group_by(predictor) %>%
+  mutate(predictor_scl = as.numeric(scale(score))) %>%
+  group_modify(
+    # Use `tidy`, `glance` or `augment` to extract different information from the fitted models.
+    ~ broom::tidy(lm(rating ~ predictor_scl*trgt_fct, data = .))
+  )
+
+
+m1 <- lm(rating ~ rwa_scl*trgt_fct, data = lm_int)
+summary(m1)
+
+m2 <- lm(rating ~ sdo_scl*trgt_fct, data = lm_int)
+summary(m2)
+
+
+## Plot
+
+ds1 %>%
+  select(case,rwa,sdo,all_of(trgt.itms.1a)) %>%
+  tidyr::pivot_longer(cols = c(rwa,sdo),
+                      names_to  = "predictor",
+                      values_to = "score") %>%
+  tidyr::pivot_longer(cols = all_of(trgt.itms.1a),
+                      names_to  = "target",
+                      values_to = "rating") %>%
+  mutate(trgt_fct = case_when(target %in% ta_con.itms.1a ~ "right",
+                              target %in% ta_lib.itms.1a ~ "left")) %>%
+  group_by(predictor) %>%
+  mutate(predictor_scl = as.numeric(scale(score))) %>%
+  ggplot(aes(y = rating, x = predictor_scl,color = trgt_fct)) +
+  geom_smooth(se = T, method = lm) +
+  facet_wrap(~predictor)
+
+### Centered Targets ----
+
+
+prej_cent.1a <- 
+  ds1 %>%
+  select(case,rwa,sdo,starts_with("prj_")) %>%
+  tidyr::pivot_longer(cols = starts_with("prj_"),
+                      names_to = "target",
+                      values_to = "rating") %>%
+  full_join(.,
+            ds1 %>%
+              select(case,starts_with("prj_")) %>%
+              mutate(across(starts_with("prj_"), 
+                            ~ as.numeric(scale(.)))) %>%
+              tidyr::pivot_longer(cols = -case,
+                                  names_to = "target",
+                                  values_to = "rating_scl"),
+            by = c("case","target")
+  ) %>%
+  full_join(.,
+            ds1 %>%
+              select(case,starts_with("prj_")) %>%
+              mutate(across(all_of(trgt.itms.1a), 
+                            ~ . - mean(.,na.rm = T))) %>%
+              tidyr::pivot_longer(cols = -case,
+                                  names_to = "target",
+                                  values_to = "rating_gmc"),
+            by = c("case","target")
+  )
+
+         
+prej_cent.1a <- 
+prej_cent.1a %>%
+  tidyr::pivot_longer(cols = c(rwa,sdo),
+                      names_to = "scale",
+                      values_to = "score") %>%
+  group_by(scale) %>%
+  mutate(hilo = case_when(score > median(score,na.rm = T) ~ "high",
+                          TRUE ~ "low")) %>%
+  ungroup() %>%
+  group_by(target,scale,hilo) %>%
+  summarise(raw = mean(rating,na.rm = T),
+            gmc = mean(rating_gmc,na.rm = T),
+            scl = mean(rating_scl,na.rm = T)) %>%
+  tidyr::pivot_longer(cols = c(raw,gmc,scl),
+                      names_to = "prej_cent.1aer",
+                      values_to = "prj_rating") %>%
+  tidyr::pivot_wider(names_from = c("hilo","prej_cent.1aer"),
+                     values_from = prj_rating) %>%
+  group_by(scale) %>%
+  mutate(diff_raw = abs(high_raw-low_raw),
+         diff_gmc = abs(high_gmc-low_gmc),
+         diff_scl = abs(high_scl-low_scl)) %>%
+  select(target,scale,
+         low_raw,high_raw,diff_raw,
+         low_gmc,high_gmc,diff_gmc,
+         low_scl,high_scl,diff_scl)
+
+list(data = prej_cent.1a,
+means = prej_cent.1a %>%
+  summarise_if(is.numeric,mean, na.rm = TRUE),
+sd = prej_cent.1a %>%
+  summarise_if(is.numeric,sd, na.rm = TRUE),
+corr = prej_cent.1a %>% summarise(r_raw = cor(low_raw,high_raw),
+                              r_gmc = cor(low_gmc,high_gmc),
+                              r_scl = cor(low_scl,high_scl))
+)
+
+## SHARED PREJUDICE ----
+
+
+### SAMPLE SPLIT ----
+
+split.1a <- 
+  ds1 %>%
+  select(case,rwa,sdo,all_of(trgt.itms.1a)) %>%
   tidyr::pivot_longer(cols = 4:ncol(.),names_to = "target",values_to = "rating") %>%
   tidyr::pivot_longer(cols = 2:3,names_to = "scale",values_to = "value") %>%
   group_by(scale) %>%
@@ -272,36 +371,72 @@ ds1 %>%
   summarise(m = mean(rating,na.rm = T)) %>%
   tidyr::pivot_wider(names_from = "hilo",  values_from = m) %>%
   mutate(diff = abs(high-low)) %>%
-  group_by(scale) %>%
-  summarise(m = mean(diff),
-            sd = sd(diff),
-            r = cor(high,low))
+  tidyr::pivot_wider(names_from = "scale",
+                     values_from = c("high","low","diff"),
+                     names_glue = "{scale}_{.value}") %>%
+  ungroup()
+  
+  
+list(data = split.1a,
+     means = split.1a %>%
+       summarise_if(is.numeric,mean, na.rm = TRUE),
+     sd = split.1a %>%
+       summarise_if(is.numeric,sd, na.rm = TRUE),
+     corr = split.1a %>% select(!ends_with("_diff")) %>% corrr::correlate())
 
-## Left-right interaction ----
 
-lm_int <- 
+# DESCRIPTIVES ----
+
 ds1 %>%
-  select(case,rwa,sdo,all_of(trgt.itms)) %>%
-  tidyr::pivot_longer(cols = all_of(trgt.itms),
-                      names_to  = "target",
-                      values_to = "rating") %>%
-  mutate(rwa_scl  = as.numeric(scale(rwa)),
-         sdo_scl  = as.numeric(scale(sdo)),
-         trgt_fct = case_when(target %in% ta_rght.itms ~ "right",
-                              target %in% ta_lft.itms ~ "left")) 
+  select(all_of(prdctrs),starts_with("prj"),ta_lib,ta_con) %>%
+  tidyr::pivot_longer(cols = 1:ncol(.),names_to = "variable") %>%
+  #group_by(variable) %>%
+  reframe(Mean = mean(value, na.rm = T),
+            SD = sd(value, na.rm = T),
+            Median = median(value, na.rm = T),
+            Min = min(value,na.rm = T),
+            Max = max(value, na.rm = T),
+            range = abs(Max-Min),
+          .by = variable) %>%
+  print(n = nrow(.))
 
-m1 <- lm(rating ~ rwa_scl*trgt_fct, data = lm_int)
-summary(m1)
+# DEMOGRAFICS ----
 
-m2 <- lm(rating ~ sdo_scl*trgt_fct, data = lm_int)
-summary(m2)
-
-lm_int %>%
-  tidyr::pivot_longer(cols = c(rwa,rwa_scl,sdo,sdo_scl), 
-                      names_to = "scale",
-                      values_to = "score") %>%
-  filter(scale == "rwa_scl"|scale == "sdo_scl") %>%
-  ggplot(aes(y = rating, x = score,color = trgt_fct)) +
-  geom_smooth(se = FALSE, method = lm) +
-  facet_wrap(~scale)
+ds1 %>%
+  select(age,polid) %>%
+  tidyr::pivot_longer(cols = 1:ncol(.),names_to = "variable") %>%
+  #group_by(variable) %>%
+  reframe(Mean = mean(value, na.rm = T),
+          SD = sd(value, na.rm = T),
+          Median = median(value, na.rm = T),
+          Min = min(value,na.rm = T),
+          Max = max(value, na.rm = T),
+          range = abs(Max-Min),
+          n = n(),
+          .by = variable) %>%
+  data.frame() %>%
+  plyr::rbind.fill(.,
+                   ds1 %>%
+                     mutate(gender = case_when(gender == 1 ~ "female",
+                                               gender == 2 ~ "male",
+                                               TRUE~ "other")) %>%
+                     janitor::tabyl(gender) %>%
+                     rename("variable"="gender") %>%
+                     data.frame()
+  ) %>% 
+  plyr::rbind.fill(
+    ds1 %>%
+      mutate(education = case_when(education == 1 ~ "es_isced_1",
+                                   education == 2 ~ "es_isced_2",
+                                   education == 3 ~ "es_isced_3",
+                                   education == 4 ~ "es_isced_4",
+                                   education == 5 ~ "es_isced_5",
+                                   education == 6 ~ "es_isced_6",
+                                   education == 7 ~ "es_isced_7",
+                                   TRUE ~ NA)) %>%
+      janitor::tabyl(education) %>%
+      rename("variable"="education") %>%
+      select(-valid_percent) %>%
+      data.frame()
+  )
 
