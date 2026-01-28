@@ -1,0 +1,1373 @@
+---
+title: "Collective Nature of Prejudice Revision"
+format:
+  html:
+    embed-resources: true
+    theme: journal
+    toc: true
+    toc-location: left 
+    toc-depth: 5
+---
+
+```{r libraries}
+#| include: FALSE
+library(tidyverse)
+library(lme4)
+library(broom.mixed)
+library(knitr)
+library(kableExtra)
+```
+
+
+```{r get data}
+#| include: FALSE
+
+setwd("C:/Users/Clemens Lindner/Documents/github/bigot_and_tolerant_personalites")
+
+ds1 <- read.csv(file = './0_data/rwa_sdo_revisited_study_1a.csv', 
+                header = TRUE, sep = ",", as.is = T, na.strings = c("-1","-9",NA))  %>%
+  janitor::clean_names(.)
+
+
+#get codebook
+cdbk_1a <- openxlsx::read.xlsx("./0_data/three_challenges_codebook.xlsx", sheet = 1) %>%
+  mutate(variable = tolower(variable))
+
+
+rename_vars.1a <- setNames(cdbk_1a %>%
+                             pull(variable_label),
+                           cdbk_1a %>%
+                             pull(variable))
+
+ds1 <- ds1 %>%
+  rename_with(~ rename_vars.1a[.],.cols = all_of(names(rename_vars.1a)))
+
+ds1 <- ds1 %>%
+  select(case:mode,
+         starts_with("rwa"),
+         starts_with("sdo"),
+         starts_with("prj"),
+         age:ncol(.))
+
+## PREDICTORS ----
+
+prdctrs <- c("rwa","sdo","polid")
+
+### RWA ----
+
+#RWA items
+rwa.itms <- 
+  ds1 %>% select(starts_with("rwa_")) %>% names()
+
+#factor analysis
+fa_rwa.1a <- factanal(na.omit(ds1[,rwa.itms]), factors = 1, rotation = "varimax")
+fa_rwa.1a
+
+
+#alpha
+psych::alpha(ds1[,rwa.itms])
+
+#score
+ds1$rwa <- rowMeans(ds1[,rwa.itms], na.rm = TRUE)
+
+
+### SDO ----
+
+#sdo items
+sdo.itms <- 
+  ds1 %>% select(starts_with("sdo_")) %>% names()
+
+#factor analysis
+fa_sdo.1a <- factanal(na.omit(ds1[,sdo.itms]), factors = 2, rotation = "varimax")
+fa_sdo.1a
+
+#alpha
+psych::alpha(ds1[,sdo.itms])
+
+#score
+ds1$sdo <- rowMeans(ds1[,sdo.itms], na.rm = TRUE)
+
+
+## DV: TARGETS ----
+
+#recode
+ds1 <- ds1 %>% mutate(across(starts_with("prj_"), ~ 12 - .))
+
+
+#Targets
+trgt.itms.1a <- 
+  ds1 %>%
+  select(starts_with("prj_")) %>%
+  names()
+
+# STUDY 1B
+
+ds2 <- read.csv(file = './0_data/rwa_sdo_revisited_study_1b.csv', 
+                header = TRUE, sep = ",", as.is = T, na.strings = c("-1","-9",NA))  %>%
+  janitor::clean_names(.)
+
+
+#get codebook
+cdbk_1b <- openxlsx::read.xlsx("./0_data/three_challenges_codebook.xlsx", sheet = 2) %>%
+  mutate(variable = tolower(variable))
+
+
+rename_vars.1b <- setNames(cdbk_1b %>%
+                             pull(variable_label),
+                           cdbk_1b %>%
+                             pull(variable))
+
+ds2 <- ds2 %>%
+  rename_with(~ rename_vars.1b[.],.cols = all_of(names(rename_vars.1b)))
+
+ds2 <- ds2 %>%
+  select(case:mode,
+         starts_with("rwa"),
+         starts_with("sdo"),
+         starts_with("prj"),
+         gender:ncol(.))
+
+## PREDICTORS ----
+
+prdctrs <- c("rwa","sdo","polid")
+
+### RWA ----
+
+#RWA items
+rwa.itms <- 
+  ds2 %>% select(starts_with("rwa_")) %>% names()
+
+#factor analysis
+fa_rwa.1b <- factanal(na.omit(ds2[,rwa.itms]), factors = 1, rotation = "varimax")
+fa_rwa.1b
+
+
+#alpha
+psych::alpha(ds2[,rwa.itms])
+
+#score
+ds2$rwa <- rowMeans(ds2[,rwa.itms], na.rm = TRUE)
+
+
+### SDO ----
+
+#sdo items
+sdo.itms <- 
+  ds2 %>% select(starts_with("sdo_")) %>% names()
+
+#factor analysis
+fa_sdo.1b <- factanal(na.omit(ds2[,sdo.itms]), factors = 2, rotation = "varimax")
+fa_sdo.1b
+
+#alpha
+psych::alpha(ds2[,sdo.itms])
+
+#score
+ds2$sdo <- rowMeans(ds2[,sdo.itms], na.rm = TRUE)
+
+
+## DV: TARGETS ----
+
+#recode
+ds2 <- ds2 %>% mutate(across(starts_with("prj_"), ~ 12 - .))
+
+
+#Targets
+trgt.itms.1b <- 
+  ds2 %>%
+  select(starts_with("prj_")) %>%
+  names()
+
+```
+
+# Study 1a and 1b
+
+## Similarity between subsamples, Problems with Median Split
+
+Reviewer 1 writes:
+
+*"I found myself struggling with the analytic strategy the authors employed for Studies 1 and 2. The problem
+with median splits is well known: they draw an artificial distinction between participants who aren’t
+actually very different, and lump together participants who are actually pretty different from one another.
+For example, a participant with an SDO score just above the median is more similar to a participant with an
+SDO score just below the median than they are to a participant with an extremely high SDO score, but the
+median split process separates the similar participants and forces the more dissimilar participants into the
+same category. Off the top of my head I don’t have a better analytic strategy to suggest, but I would have a
+lot more confidence in these findings if they demonstrated the same conceptual pattern of results without
+relying on median splits."*
+
+To address this critique, we could implement multiple splitting thresholds. While the resulting groups would still be somewhat arbitrary, this approach would at least prevent extreme cases—such as participants with RWA scores of 1.0 and 1.9 being assigned to the same group, while someone with a score of 2.1 is placed in the “high” subsample. Specifically, I considered performing several splits: a median split, as well as additional splits at the 40th/60th, 30th/70th, 20th/80th, and 10th/90th percentiles.
+
+### Study 1a
+
+Here you see what is happening:
+```{r}
+splits_1a <- 
+  ds1 %>%
+  select(case,rwa,sdo,all_of(trgt.itms.1a)) %>%
+  pivot_longer(cols = all_of(trgt.itms.1a),
+               names_to = "target",
+               values_to = "rating") %>%
+  #THIS IS THE IMPORTANT PART: SPLITTING THE SAMPLE
+  mutate(split_med = case_when(rwa > quantile(rwa,0.5,na.rm = T,names = F) ~ "high",
+                               rwa < quantile(rwa,0.5,na.rm = T,names = F) ~ "low"),
+         split_46 =  case_when(rwa > quantile(rwa,0.6,na.rm = T,names = F) ~ "high",
+                               rwa < quantile(rwa,0.4,na.rm = T,names = F) ~ "low"),
+         split_37 =  case_when(rwa > quantile(rwa,0.7,na.rm = T,names = F) ~ "high",
+                               rwa < quantile(rwa,0.3,na.rm = T,names = F) ~ "low"),
+         split_28 =  case_when(rwa > quantile(rwa,0.8,na.rm = T,names = F) ~ "high",
+                               rwa < quantile(rwa,0.2,na.rm = T,names = F) ~ "low"),
+         split_19 =  case_when(rwa > quantile(rwa,0.9,na.rm = T,names = F) ~ "high",
+                               rwa < quantile(rwa,0.1,na.rm = T,names = F) ~ "low")) %>%
+  pivot_longer(cols = starts_with("split"),
+               names_to = "split",
+               values_to = "subgroup") %>%
+  group_by(target,split,subgroup) %>%
+  summarise(prj_mean = mean(rating,na.rm = T)) %>%
+  filter(!is.na(subgroup)) %>%
+  pivot_wider(names_from = "subgroup",
+              values_from = "prj_mean") %>%
+  mutate(diff = abs(high-low),
+         split_num = case_when(split == "split_med" ~ 0,
+                               split == "split_46" ~ 1,
+                               split == "split_37" ~ 2,
+                               split == "split_28" ~ 3,
+                               split == "split_19" ~ 4),
+         target = str_remove_all(target,"prj_"),
+         target = str_to_title(str_replace_all(target,"_"," "))) %>%
+  ungroup()
+
+```
+
+**Plotting the absolute difference values for each target by split **
+
+Higher split values indicate the difference in RWA between subsamples, so the higher the split value the more distance (in units on the RWA scale) is between the subgroups.
+```{r}
+#| echo: FALSE
+#| output: TRUE
+
+ggplot(aes(split_num,diff, color = target),data = splits_1a) +
+  geom_point() +
+  theme_minimal()
+  
+```
+
+Descripively, we see that the difference between prejudice means increases with increasing differences in RWA. Although, there are still targets that seem to be highly consensual.
+
+**Correlation across all sample splits**
+```{r}
+splits_1a %>%
+  select(high,low) %>%
+  correlation::correlation()
+```
+Correlation across all subsample splits is ***r*** = **`r round(cor(splits_1a$high,splits_1a$low),3)`**. As we would expect, this is lower than the  ~ .80 that we had before, when we only conduct the median split. In this sense, this approach may be a more strict test.
+
+However, we can also compute the correlation for each single split:
+
+```{r}
+#| echo: FALSE
+#| output: TRUE
+splits_1a %>%
+  select(split,high,low) %>%
+  group_by(split) %>%
+  correlation::correlation()
+```
+
+### Study 1b
+
+Now the same approach for Study 1b.
+
+```{r}
+#| include: FALSE
+
+splits_1b <- 
+  ds2 %>%
+  select(case,rwa,sdo,all_of(trgt.itms.1b)) %>%
+  pivot_longer(cols = all_of(trgt.itms.1b),
+               names_to = "target",
+               values_to = "rating") %>%
+  #THIS IS THE IMPORTANT PART: SPLITTING THE SAMPLE
+  mutate(split_med = case_when(rwa > quantile(rwa,0.5,na.rm = T,names = F) ~ "high",
+                               rwa < quantile(rwa,0.5,na.rm = T,names = F) ~ "low"),
+         split_46 =  case_when(rwa > quantile(rwa,0.6,na.rm = T,names = F) ~ "high",
+                               rwa < quantile(rwa,0.4,na.rm = T,names = F) ~ "low"),
+         split_37 =  case_when(rwa > quantile(rwa,0.7,na.rm = T,names = F) ~ "high",
+                               rwa < quantile(rwa,0.3,na.rm = T,names = F) ~ "low"),
+         split_28 =  case_when(rwa > quantile(rwa,0.8,na.rm = T,names = F) ~ "high",
+                               rwa < quantile(rwa,0.2,na.rm = T,names = F) ~ "low"),
+         split_19 =  case_when(rwa > quantile(rwa,0.9,na.rm = T,names = F) ~ "high",
+                               rwa < quantile(rwa,0.1,na.rm = T,names = F) ~ "low")) %>%
+  pivot_longer(cols = starts_with("split"),
+               names_to = "split",
+               values_to = "subgroup") %>%
+  group_by(target,split,subgroup) %>%
+  summarise(prj_mean = mean(rating,na.rm = T)) %>%
+  filter(!is.na(subgroup)) %>%
+  pivot_wider(names_from = "subgroup",
+              values_from = "prj_mean") %>%
+  mutate(diff = abs(high-low),
+         split_num = case_when(split == "split_med" ~ 0,
+                               split == "split_46" ~ 1,
+                               split == "split_37" ~ 2,
+                               split == "split_28" ~ 3,
+                               split == "split_19" ~ 4),
+         target = str_remove_all(target,"prj_"),
+         target = str_to_title(str_replace_all(target,"_"," "))) %>%
+  ungroup()
+
+```
+
+**Plotting the absolute difference values for each target by split **
+  
+  Higher split values indicate the difference in RWA between subsamples, so the higher the split value the more distance (in units on the RWA scale) is between the subgroups.
+```{r}
+#| echo: FALSE
+#| output: TRUE
+
+ggplot(aes(split_num,diff, color = target),data = splits_1b) +
+  geom_point() +
+  theme_minimal()
+
+```
+
+Descripively, we see that the difference between prejudice means increases with increasing differences in RWA. Although, there are still targets that seem to be highly consensual.
+
+**Correlation across all sample splits**
+```{r}
+splits_1b %>%
+  select(high,low) %>%
+  correlation::correlation()
+```
+Correlation across all subsample splits is ***r*** = **`r round(cor(splits_1b$high,splits_1b$low),3)`**. Wow, this is a low correlation.
+
+However, we can have a closer look and compute the correlation for each single split:
+  
+```{r}
+#| echo: FALSE
+#| output: TRUE
+splits_1b %>%
+  select(split,high,low) %>%
+  group_by(split) %>%
+  correlation::correlation()
+```
+
+Ok, here we see that prejudices are actually negatively correlated, when we for instance correlate the mean values from the lower RWA 10% decile and the higher RWA 90% decile.
+
+## Variance decomposition
+
+Reviewer 2 writes:
+
+*"The multilevel modeling results reported by the authors show that 20–30% of the total variance is
+observable on the target-level, whereas RWA/SDO explain only 7–12% of the variance between respondents. The
+authors then argue that target-level differences account for the largest share of the variance. This
+comparison is problematic, however, because the respondent-level estimate reflects variance explained by
+predictors (RWA/SDO), while the target-level estimate reflects observed variance. I do not think the approach
+proposed by Rights and Sterba (2019) is appropriate here. A more suitable comparison would involve computing
+the ICC after restructuring the data with targets nested within respondents. This would likely show that more
+variance is obervable on the respondent-level than at the target-level, contradicting the authors’
+interpretation. Another useful approach would be variance decomposition as applied by Koch et al. (2020),
+which the authors cite. This would partition the variance into group variance (consensual differences between
+targets), rater variance (differences between respondents in their overall prejudice), and group × rater
+variance (non-consensual differences between targets). The limitation, however, is that this approach cannot
+disentangle error variance from the group × rater variance."*
+
+### Nested Target approach
+
+*I do not think the approach
+proposed by Rights and Sterba (2019) is appropriate here. A more suitable comparison would involve computing
+the ICC after restructuring the data with targets nested within respondents. This would likely show that more
+variance is obervable on the respondent-level than at the target-level, contradicting the authors’
+interpretation.*
+
+As far as I undestand it the reviewer describes the model like this: `(prejudice rating ~ 1 + (1|case/target)` where targets are nested within participants (case). However, such a model is not possible with our data since we have only one target rating per participant. Hence, the model *target nested within participant* is fully identified and as a result, there is no variance at the target:participant level. I belief that the reviewer is from the Koch et al. group, because she/he suggests things that they did with two measures within participant  
+
+### Koch et al. (2020) approach
+
+*Another useful approach would be variance decomposition as applied by Koch et al. (2020),
+which the authors cite. This would partition the variance into group variance (consensual differences between
+targets), rater variance (differences between respondents in their overall prejudice), and group × rater
+variance (non-consensual differences between targets). The limitation, however, is that this approach cannot
+disentangle error variance from the group × rater variance.*
+
+Below you find the Koch et al (2020) approach. However, else than Koch et al., we cannot model the target x person interaction because we would need at least two measures of each target within participant. Therefore, the formula is `prejudice ~ 1 + (1 | case) + (1 | target)`.
+
+#### Study 1a
+
+##### Model 1: Random effects for Participants and Targets
+```{r rearrange data 1a}
+#| include: FALSE
+
+var_decomp_1a <- 
+  ds1 %>%
+  select(case,rwa,sdo,all_of(trgt.itms.1a)) %>%
+  pivot_longer(cols = all_of(trgt.itms.1a),
+               names_to = "target",
+               values_to = "rating") %>%
+  mutate(target = str_remove(target,"prj_"),
+         target = as_factor(target),
+         case = paste0("case",case))
+
+var_decomp_1a <- 
+  var_decomp_1a %>%
+  filter(complete.cases(.))
+```
+Data is in long format:
+```{r}
+head(var_decomp_1a)
+```
+
+
+**Fitting the model:**
+```{r}
+mod_a_1a = lmer(rating ~ 1 + (1|case) + (1|target), data = var_decomp_1a)
+summary(mod_a_1a)
+```
+
+Descriptively, we see that the variance within target is much bigger than variance within participant.
+
+**Calculating the ICCs for each random effect:**
+
+`icc case   <- var_case / (var_case + var_target + var_residual)`
+
+`icc target <- var_target / (var_case + var_target + var_residual)`
+```{r}
+#| echo: FALSE
+#| output: TRUE
+vc <- as.data.frame(VarCorr(mod_a_1a))
+
+var_case   <- vc[vc$grp == "case", "vcov"]
+var_target <- vc[vc$grp == "target", "vcov"]
+var_resid  <- attr(VarCorr(mod_a_1a), "sc")^2
+
+icc_case   <- var_case / (var_case + var_target + var_resid)
+icc_target <- var_target / (var_case + var_target + var_resid)
+
+knitr::kable(
+  data.frame("Random effect" = c("Participant","Target"),
+           ICC = c(icc_case,icc_target)),
+  format = "html") %>%
+  kableExtra::kable_styling(full_width = TRUE, bootstrap_options = c("striped", "hover")) %>%
+  kableExtra::row_spec(0, italic = T)
+
+```
+
+```{r}
+performance::icc(mod_a_1a)
+```
+
+The ICC of the participant (Variance explained by clustering variable participant) is `r round(icc_case,4)`, the ICC of target (variance explained by clustering variable target) is `r round(icc_target,4)`.
+
+##### Model 2: Fixed effects RWA, SDO, Random effects Participants and Targets
+Now adding RWA and SDO as fixed effects
+```{r}
+mod_rwasdo_1a = lmer(rating ~ rwa + sdo + (1|case) + (1|target), data = var_decomp_1a)
+summary(mod_rwasdo_1a)
+```
+
+**Calculating the ICCs for each random effect:**
+```{r}
+#| echo: FALSE
+#| output: TRUE
+
+vc <- as.data.frame(VarCorr(mod_rwasdo_1a))
+
+var_case   <- vc[vc$grp == "case", "vcov"]
+var_target <- vc[vc$grp == "target", "vcov"]
+var_resid  <- attr(VarCorr(mod_rwasdo_1a), "sc")^2
+
+icc_case   <- var_case / (var_case + var_target + var_resid)
+icc_target <- var_target / (var_case + var_target + var_resid)
+
+knitr::kable(
+  data.frame("Random effect" = c("Participant","Target"),
+           ICC = c(icc_case,icc_target)),
+  format = "html") %>%
+  kableExtra::kable_styling(full_width = TRUE, bootstrap_options = c("striped", "hover")) %>%
+  kableExtra::row_spec(0, italic = T)
+
+```
+
+```{r}
+# performance
+performance::icc(mod_rwasdo_1a)
+performance::r2(mod_rwasdo_1a)
+
+```
+
+The ICCs remain high even if we introduce fixed effects. The Marginal R^2^ shows that even if we include RWA and SDO as predictors, the much bigger proportion of variance is explained by random effects.
+
+##### Model 3: Random effects for Participants, Targets, RWA subsamples
+Random effects within high vs low RWA / SDO individuals
+
+```{r creating new subgroups 1a}
+#| include: FALSE
+
+var_decomp_1a <- 
+  var_decomp_1a %>%
+  mutate(rwa_med_split = case_when(rwa > median(rwa,na.rm = T) ~ "high",
+                                   rwa < median(rwa,na.rm = T) ~ "low"),
+         rwa_1sd_split = case_when(rwa > (mean(rwa,na.rm = T) + sd(rwa,na.rm = T)) ~ "+1sd",
+                                   rwa < (mean(rwa,na.rm = T) - sd(rwa,na.rm = T)) ~ "-1sd",
+                                   TRUE ~ NA))
+```
+Added 2 new variables that cluster participants (1) along the median split in the high vs. low sample and (2) along the +1 SD in RWA subsample and -1 SD in RWA subsample, respectively. Have a look:
+```{r}
+head(var_decomp_1a)
+```
+
+Now building the new models with specified random effects within the subgroups
+```{r}
+mod_b_1a = lmer(rating ~ 1 + (1|case) + (1|target) + (1|rwa_med_split) + (1|rwa_1sd_split), data = var_decomp_1a)
+summary(mod_b_1a)
+```
+**Calculating the ICCs for each random effect:**
+```{r}
+#| echo: FALSE
+#| output: TRUE
+vc <- as.data.frame(VarCorr(mod_b_1a))
+
+var_case   <- vc[vc$grp == "case", "vcov"]
+var_target <- vc[vc$grp == "target", "vcov"]
+var_rwa_med_split <- vc[vc$grp == "rwa_med_split", "vcov"]
+var_rwa_1sd_split <- vc[vc$grp == "rwa_1sd_split", "vcov"]
+var_resid  <- attr(VarCorr(mod_b_1a), "sc")^2
+
+# ICCs berechnen
+icc_case      <- var_case / (var_case + var_target + var_resid)
+icc_target    <- var_target / (var_case + var_target + var_rwa_med_split + var_rwa_1sd_split + var_resid)
+icc_med_split <- var_rwa_med_split / (var_case + var_target + var_rwa_med_split + var_rwa_1sd_split + var_resid)
+icc_1sd_split <- var_rwa_1sd_split / (var_case + var_target + var_rwa_med_split + var_rwa_1sd_split + var_resid)
+
+knitr::kable(
+  data.frame("Random effect" = c("Participant","Target","RWA Median Split Subsamples","RWA +-1SD Subsamples"),
+           ICC = c(icc_case,icc_target,icc_med_split,icc_1sd_split)),
+  format = "html") %>%
+  kableExtra::kable_styling(full_width = TRUE, bootstrap_options = c("striped", "hover")) %>%
+  kableExtra::row_spec(0, italic = T)
+
+```
+
+```{r}
+# performance
+performance::icc(mod_b_1a)
+performance::r2(mod_b_1a)
+
+```
+
+What we see is that the (arbitrary) cluster of sample splits (high / low RWA) explain almost no variance in our DV (prejudice). Hence, it seems not meaningful to distinguish between high / low RWA subsamples.
+
+##### Model 4: Prejudice mean centered prejudice targets
+
+Each prejudice target was mean centered (mean centered for every prejudice target separately, NOT at the mean across all prejudice targets).
+```{r rearrange data zscore 1a}
+#| include: FALSE
+var_decompc_1a <- 
+  ds1 %>%
+  select(case,rwa,sdo,all_of(trgt.itms.1a)) %>%
+  mutate(across(all_of(trgt.itms.1a),~.- mean(.,na.rm = T))) %>%
+  pivot_longer(cols = all_of(trgt.itms.1a),
+               names_to = "target",
+               values_to = "mc_rating") %>%
+  mutate(target = str_remove(target,"prj_"),
+         target = as_factor(target),
+         case = paste0("case",case))
+
+var_decompc_1a <- 
+  var_decompc_1a %>%
+  filter(complete.cases(.))
+```
+
+Have a look at the data:
+```{r}
+head(var_decompc_1a)
+```
+
+
+**Fitting the model:**
+```{r}
+mod_amc_1a = lmer(mc_rating ~ 1 + (1|case) + (1|target), data = var_decompc_1a)
+summary(mod_amc_1a)
+```
+
+Now, for mean centered prejudice targets. The model has convergence problems. We see that the target variance is smaller (of course, we removed it). Only the variance within participant and residual remains. Between target variance is important.
+
+**Calculating the ICCs for each random effect:**
+```{r}
+#| echo: FALSE
+#| output: TRUE
+vc <- as.data.frame(VarCorr(mod_amc_1a))
+
+var_case   <- vc[vc$grp == "case", "vcov"]
+var_target <- vc[vc$grp == "target", "vcov"]
+var_resid  <- attr(VarCorr(mod_amc_1a), "sc")^2
+
+# ICCs berechnen
+icc_case   <- var_case / (var_case + var_target + var_resid)
+icc_target <- var_target / (var_case + var_target + var_resid)
+
+knitr::kable(
+  data.frame("Random effect" = c("Participant","Target"),
+           ICC = c(icc_case,icc_target)),
+  format = "html") %>%
+  kableExtra::kable_styling(full_width = TRUE, bootstrap_options = c("striped", "hover")) %>%
+  kableExtra::row_spec(0, italic = T)
+```
+
+```{r}
+#performance
+performance::icc(mod_amc_1a)
+```
+
+#### Study 1b
+
+##### Model 1: Random effects for Participants and Targets
+```{r rearrange data 1b}
+#| include: FALSE
+
+var_decomp_1b <- 
+  ds2 %>%
+  select(case,rwa,sdo,all_of(trgt.itms.1b)) %>%
+  pivot_longer(cols = all_of(trgt.itms.1b),
+               names_to = "target",
+               values_to = "rating") %>%
+  mutate(target = str_remove(target,"prj_"),
+         target = as_factor(target),
+         case = paste0("case",case))
+
+var_decomp_1b <- 
+  var_decomp_1b %>%
+  filter(complete.cases(.))
+```
+
+Data is in long format:
+```{r}
+head(var_decomp_1b)
+```
+
+
+**Fitting the model:**
+```{r}
+mod_a_1b = lmer(rating ~ 1 + (1|case) + (1|target), data = var_decomp_1b)
+summary(mod_a_1b)
+
+```
+
+
+**Calculating the ICCs for each random effect:**
+```{r}
+#| echo: FALSE
+#| output: TRUE
+vc <- as.data.frame(VarCorr(mod_a_1b))
+
+var_case   <- vc[vc$grp == "case", "vcov"]
+var_target <- vc[vc$grp == "target", "vcov"]
+var_resid  <- attr(VarCorr(mod_a_1b), "sc")^2
+
+
+# ICCs berechnen
+icc_case   <- var_case / (var_case + var_target + var_resid)
+icc_target <- var_target / (var_case + var_target + var_resid)
+
+knitr::kable(
+  data.frame("Random effect" = c("Participant","Target"),
+           ICC = c(icc_case,icc_target)),
+  format = "html") %>%
+  kableExtra::kable_styling(full_width = TRUE, bootstrap_options = c("striped", "hover")) %>%
+  kableExtra::row_spec(0, italic = T)
+
+```
+
+```{r}
+# ICC full model
+performance::icc(mod_a_1b)
+```
+Again, we see that the variance within target is bigger than variance within participant. However, the variance within participant is much bigger compared to Study 1a. This may be due to the different response scale, 1 - 101 instead of 1 - 11 (Study 1a). 
+
+The ICC of the participant (Variance explained by clustering variable participant) is `r round(icc_case,4)`, the ICC of target (variance explained by clustering variable target) is `r round(icc_target,4)`.
+
+##### Model 2: Fixed effects RWA, SDO, Random effects Participants and Targets
+
+Now adding RWA and SDO as fixed effects
+```{r}
+mod_rwasdo_1b = lmer(rating ~ rwa + sdo + (1|case) + (1|target), data = var_decomp_1b)
+summary(mod_rwasdo_1b)
+```
+
+**Calculating the ICCs for each random effect:**
+```{r}
+#| echo: FALSE
+#| output: TRUE
+vc <- as.data.frame(VarCorr(mod_rwasdo_1b))
+
+var_case   <- vc[vc$grp == "case", "vcov"]
+var_target <- vc[vc$grp == "target", "vcov"]
+var_resid  <- attr(VarCorr(mod_rwasdo_1b), "sc")^2
+
+# ICCs berechnen
+icc_case   <- var_case / (var_case + var_target + var_resid)
+icc_target <- var_target / (var_case + var_target + var_resid)
+
+knitr::kable(
+  data.frame("Random effect" = c("Participant","Target"),
+           ICC = c(icc_case,icc_target)),
+  format = "html") %>%
+  kableExtra::kable_styling(full_width = TRUE, bootstrap_options = c("striped", "hover")) %>%
+  kableExtra::row_spec(0, italic = T)
+
+```
+
+```{r}
+# performance
+performance::icc(mod_rwasdo_1b)
+performance::r2(mod_rwasdo_1b)
+
+```
+
+The ICCs remain high even if we introduce fixed effects. The Marginal R^2^ shows that even if we include RWA and SDO as predictors, the much bigger proportion of variance is explained by random effects.
+
+##### Model 3: Random effects for Participants, Targets, RWA subsamples
+Random effects within high vs low RWA / SDO individuals
+  
+```{r creating new subgroups 1b}
+#| include: FALSE
+
+var_decomp_1b <- 
+  var_decomp_1b %>%
+  mutate(rwa_med_split = case_when(rwa > median(rwa,na.rm = T) ~ "high",
+                                   rwa < median(rwa,na.rm = T) ~ "low"),
+         rwa_1sd_split = case_when(rwa > (mean(rwa,na.rm = T) + sd(rwa,na.rm = T)) ~ "+1sd",
+                                   rwa < (mean(rwa,na.rm = T) - sd(rwa,na.rm = T)) ~ "-1sd",
+                                   TRUE ~ NA))
+var_decomp_1b <-
+  var_decomp_1b %>%
+  filter(complete.cases(.))
+```
+
+Added 2 new variables that cluster participants (1) along the median split in the high vs. low sample and (2) along the +1 SD in RWA subsample and -1 SD in RWA subsample, respectively. Have a look:
+```{r}
+head(var_decomp_1b)
+```
+
+Now building the new models with specified random effects within the subgroups
+```{r}
+mod_b_1b = lmer(rating ~ 1 + (1|case) + (1|target) + (1|rwa_med_split) + (1|rwa_1sd_split), data = var_decomp_1b)
+summary(mod_b_1b)
+```
+**Calculating the ICCs for each random effect:**
+```{r}
+#| echo: FALSE
+#| output: TRUE
+vc <- as.data.frame(VarCorr(mod_b_1b))
+
+var_case   <- vc[vc$grp == "case", "vcov"]
+var_target <- vc[vc$grp == "target", "vcov"]
+var_rwa_med_split <- vc[vc$grp == "rwa_med_split", "vcov"]
+var_rwa_1sd_split <- vc[vc$grp == "rwa_1sd_split", "vcov"]
+var_resid  <- attr(VarCorr(mod_b_1b), "sc")^2
+
+
+# ICCs berechnen
+icc_case      <- var_case / (var_case + var_target + var_resid)
+icc_target    <- var_target / (var_case + var_target + var_rwa_med_split + var_rwa_1sd_split + var_resid)
+icc_med_split <- var_rwa_med_split / (var_case + var_target + var_rwa_med_split + var_rwa_1sd_split + var_resid)
+icc_1sd_split <- var_rwa_1sd_split / (var_case + var_target + var_rwa_med_split + var_rwa_1sd_split + var_resid)
+
+knitr::kable(
+  data.frame("Random effect" = c("Participant","Target","RWA Median Split Subsamples","RWA +-1SD Subsamples"),
+           ICC = c(icc_case,icc_target,icc_med_split,icc_1sd_split)),
+  format = "html") %>%
+  kableExtra::kable_styling(full_width = TRUE, bootstrap_options = c("striped", "hover")) %>%
+  kableExtra::row_spec(0, italic = T)
+
+```
+
+```{r}
+# ICC full model
+performance::icc(mod_b_1b)
+```
+
+Again, what we see is that the (arbitrary) cluster of sample splits (high / low RWA) explain almost no variance in our DV (prejudice). Hence, it seems not meaningful to distinguish between high / low RWA subsamples.
+
+# Study 2
+
+## Critique of median split, ICCs at each level
+
+Reviewer 2 writes:
+
+*"Study 2: I missed the calculation of ICCs for all respondent-level variables. This would provide a
+clearer picture of how much variance actually can be observed at the country-level. While the results
+demonstrate that social context matters, I am not convinced they substantiate the claim that social context
+is more important than individual-difference variables."*
+
+```{r get data study 2}
+#| include: FALSE
+
+ess4 <- haven::read_sav('./0_data/european_social_survey_wave_4_2008.sav')
+cdbk_2 <- openxlsx::read.xlsx("./0_data/three_challenges_codebook.xlsx", sheet = 3)
+
+
+ess4 <- 
+  ess4 %>%
+  select(matches(cdbk_2$variable_name),-matches("^gndr([1-9]|1[0-6])$"))  %>%
+  mutate_at(vars(contains("regi")),~haven::as_factor(.,levels = "label")) %>%
+  tidyr::unite("region",starts_with("regio"),na.rm = TRUE) %>%
+  mutate(cntry_lbl = haven::as_factor(cntry,  levels = "label"),
+         cntry_cde  = haven::as_factor(cntry,  levels = "value"),
+         gndr       = haven::as_factor(gndr,   levels = "label"), .keep = "unused")
+
+
+# SCALES ----
+
+## TRADITIONALISM ----
+
+trd.itms <- 
+  c(
+  "ipfrule",
+  "ipstrgv",
+  "ipbhprp",
+  "imptrad",
+  "impsafe"
+  )
+
+trd.itms_scl <- 
+  c(
+  "ipfrule_scl",
+  "ipstrgv_scl",
+  "ipbhprp_scl",
+  "imptrad_scl",
+  "impsafe_scl"
+  )
+  
+
+ess4$ipfrule <- 7-ess4$ipfrule
+ess4$ipstrgv <- 7-ess4$ipstrgv
+ess4$ipbhprp <- 7-ess4$ipbhprp
+ess4$imptrad <- 7-ess4$imptrad
+ess4$impsafe <- 7-ess4$impsafe
+
+ess4 <- 
+  ess4 %>%
+  mutate(across(all_of(trd.itms), ~as.numeric(scale(.)),.names ="{.col}_scl"))
+
+
+trd_fa <- psych::fa(ess4 %>%
+                       select(all_of(trd.itms)), 
+                     nfactors = 1, 
+                     rotate = "oblimin", 
+                     fm = "ml")
+
+trd_fa
+loadings(trd_fa)[] %>%
+  data.frame() %>%
+  rowwise() %>%
+  mutate(across(everything(), ~ if_else(. == max(c_across(everything()), na.rm = TRUE), ., NA_real_)))
+
+
+psych::alpha(ess4[trd.itms])
+psych::alpha(ess4[trd.itms_scl])
+
+ess4$trd     <- rowMeans(ess4[trd.itms],na.rm = T)
+ess4$trd_scl <- rowMeans(ess4[trd.itms_scl],na.rm = T)
+
+
+## ANTI-GAY ----
+
+ess4 <- 
+  ess4 %>%
+  mutate(anti_gay     = freehms,
+         anti_gay_scl = as.numeric(scale(freehms)),.keep = "unused")
+
+
+## ANTI-IMMIGRANT ----
+anti_mig.itms     <- c("imbgeco","imueclt","imwbcnt")
+anti_mig.itms_scl <- c("imbgeco_scl","imueclt_scl","imwbcnt_scl")
+
+
+ess4 <- 
+  ess4 %>%
+  mutate(across(c("imbgeco","imueclt","imwbcnt"), ~ 11 - .),
+         across(all_of(anti_mig.itms), ~as.numeric(scale(.)),.names ="{.col}_scl"))
+
+psych::alpha(ess4[anti_mig.itms])
+psych::alpha(ess4[anti_mig.itms_scl])
+
+ess4$anti_immigrant     <- rowMeans(ess4[anti_mig.itms],na.rm = T)
+ess4$anti_immigrant_scl <- rowMeans(ess4[anti_mig.itms_scl],na.rm = T)
+
+
+## UNEMPLOYED ----
+ess4 <- 
+  ess4 %>%
+  mutate(unemployed     = 6 - uentrjb,
+         unemployed_scl = as.numeric(scale(unemployed)),.keep = "unused")
+
+
+## WOMEN ----
+anti_wmn.itms     <- c("wmcpwrk","mnrgtjb")
+anti_wmn.itms_scl <- c("wmcpwrk_scl","mnrgtjb_scl")
+
+ess4 <- 
+  ess4 %>%
+  mutate(across(all_of(anti_wmn.itms),~6-.),
+         across(all_of(anti_wmn.itms), ~as.numeric(scale(.)),.names = "{.col}_scl"))
+
+psych::alpha(ess4[anti_wmn.itms])
+psych::alpha(ess4[anti_wmn.itms_scl])
+
+ess4$sexist     <- rowMeans(ess4[anti_wmn.itms],na.rm = T)
+ess4$sexist_scl <- rowMeans(ess4[anti_wmn.itms_scl],na.rm = T)
+
+## AGEISM ----
+
+ess4 <- 
+  ess4 %>%
+  mutate(ppl_20s     = 11 - oafl20,
+         ppl_70s     = 11 - oafl70,
+         ppl_20s_scl = as.numeric(scale(ppl_20s)),
+         ppl_70s_scl = as.numeric(scale(ppl_70s)), .keep = "unused")
+
+
+target.itms     <- c("anti_gay","anti_immigrant","unemployed","sexist","ppl_20s","ppl_70s")
+target.itms_scl <- c("anti_gay_scl","anti_immigrant_scl","unemployed_scl","sexist_scl","ppl_20s_scl","ppl_70s_scl")
+
+ess4 <-
+  ess4 %>%
+  rename("prj_immigrants" = "anti_immigrant",
+         "prj_homosexuals" = "anti_gay",
+         "prj_unemployed" = "unemployed",
+         "prj_women" = "sexist",
+         "prj_people70" = "ppl_70s",
+         "prj_people20" = "ppl_20s")
+
+```
+
+I ran into problems of the multilevel model when I z-standardized all prejudice targets, because, with z-std targets some variance components became (become) 0. Therefore, I decided to apply **linear rescaling** to bring all targets on the same scale. Hence, all targets are then on a 1 (min) - 11 (max) scale. See below. 
+
+Preparing the data:
+```{r}
+
+rescale_linear <- function(x, old_min, old_max, new_min, new_max) {
+  ( (x - old_min) / (old_max - old_min) ) * (new_max - new_min) + new_min
+}
+
+ess4_mlm <- 
+  ess4 %>%
+  select(idno,
+         trd,
+         region,
+         cntry_cde,
+         starts_with("prj_") #all 6 prejudice targets
+         ) %>%
+  mutate(
+    trd = as.numeric(scale(trd)), #standardize traditionalism
+    idno = paste0(cntry_cde,idno),#participant identifier
+    prj_homosexuals = as.numeric(prj_homosexuals),
+    prj_homosexuals = rescale_linear(prj_homosexuals, old_min = 1,old_max = 5,new_min = 1, new_max = 11), #rescale anti gay prejudice
+    prj_unemployed  = rescale_linear(prj_unemployed,  old_min = 1,old_max = 5,new_min = 1, new_max = 11), #rescale unemployed prejudice
+    prj_women       = rescale_linear(prj_women,       old_min = 1,old_max = 5,new_min = 1, new_max = 11), #rescale anti women prejudice
+    trd_1sd_split   = case_when( #creating  +-1SD in traditionalism subsamples
+      trd >  1 ~ "+1SD",
+      trd < -1 ~ "-1SD",
+      TRUE ~ NA
+    )
+         )         
+
+#data to long format
+ess4_mlm <- 
+  ess4_mlm %>%
+  pivot_longer(cols = starts_with("prj_"),
+               names_to = "target",
+               values_to = "prejudice")
+
+```
+
+Have a look at the data:
+```{r}
+head(ess4_mlm)
+```
+
+### Koch et al. approach: Looking at the ICCs of each cluster
+
+First, fitting a simple model with all clusters as random effects, then having a look at the ICCs.
+
+#### Model 1: Region and Target as Random Effects
+
+First model looks like this: `prejudice ~ 1 + (1|region) + (1|target)`. This does not contain the countries, to see what happens later, when we add them.
+
+```{r}
+mlm_s2_m1 <- lmer(prejudice ~ 1 + (1|region) + (1|target), data = ess4_mlm)
+summary(mlm_s2_m1)
+performance::icc(mlm_s2_m1)
+```
+
+```{r}
+#| echo: FALSE
+#| output: TRUE
+vc <- as.data.frame(VarCorr(mlm_s2_m1))
+
+var_region   <- vc[vc$grp == "region", "vcov"]
+var_target <- vc[vc$grp == "target", "vcov"]
+var_resid  <- attr(VarCorr(mlm_s2_m1), "sc")^2
+
+icc_region   <- var_region / (var_region + var_target + var_resid)
+icc_target <- var_target / (var_region + var_target + var_resid)
+
+knitr::kable(
+  data.frame("Random effect" = c("Region","Target"),
+           ICC = c(icc_region,icc_target)),
+  format = "html") %>%
+  kableExtra::kable_styling(full_width = TRUE, bootstrap_options = c("striped", "hover")) %>%
+  kableExtra::row_spec(0, italic = T)
+
+```
+
+We see that the clustering variable *prejudice target* explaines the most variance in our DV prejudice. The variance explained by *prejudice target* is much bigger than the variance explained by region.
+
+#### Model 2: Country, Region and Target as Random Effects
+
+Second model looks like this: `prejudice ~ 1 + (1|country) + (1|region) + (1|target)`. Now with country added but no nesting.
+
+```{r}
+mlm_s2_m2 <- lmer(prejudice ~ 1 + (1|cntry_cde) + (1|region) + (1|target), data = ess4_mlm)
+summary(mlm_s2_m2)
+performance::icc(mlm_s2_m2)
+```
+
+```{r}
+#| echo: FALSE
+#| output: TRUE
+vc <- as.data.frame(VarCorr(mlm_s2_m2))
+
+var_cntry   <- vc[vc$grp == "cntry_cde", "vcov"]
+var_region   <- vc[vc$grp == "region", "vcov"]
+var_target <- vc[vc$grp == "target", "vcov"]
+var_resid  <- attr(VarCorr(mlm_s2_m2), "sc")^2
+
+icc_cntry   <- var_cntry  / (var_cntry + var_region + var_target + var_resid)
+icc_region  <- var_region / (var_cntry + var_region + var_target + var_resid)
+icc_target  <- var_target / (var_cntry + var_region + var_target + var_resid)
+
+knitr::kable(
+  data.frame("Random effect" = c("Country","Region","Target"),
+           ICC = c(icc_cntry,icc_region,icc_target)),
+  format = "html") %>%
+  kableExtra::kable_styling(full_width = TRUE, bootstrap_options = c("striped", "hover")) %>%
+  kableExtra::row_spec(0, italic = T)
+
+```
+
+Still *prejudice target* sems to be the relevant cluster. 
+
+#### Model 3: Country, Region, Target and Participant as Random Effects
+
+Third model adds participants as random effect and it looks like this: `prejudice ~ 1 + (1|country) + (1|region) + (1|target) + (1|participant)`.
+
+```{r}
+mlm_s2_m3 <- lmer(prejudice ~ 1 + (1|cntry_cde) + (1|region) + (1|target) + (1|idno), data = ess4_mlm)
+summary(mlm_s2_m3)
+performance::icc(mlm_s2_m3)
+```
+
+```{r}
+#| echo: FALSE
+#| output: TRUE
+vc <- as.data.frame(VarCorr(mlm_s2_m3))
+
+var_cntry   <- vc[vc$grp == "cntry_cde", "vcov"]
+var_region   <- vc[vc$grp == "region", "vcov"]
+var_target <- vc[vc$grp == "target", "vcov"]
+var_idno <- vc[vc$grp == "idno", "vcov"]
+
+var_resid  <- attr(VarCorr(mlm_s2_m3), "sc")^2
+
+icc_cntry   <- var_cntry  / (var_cntry + var_region + var_target + var_idno + var_resid)
+icc_region  <- var_region / (var_cntry + var_region + var_target + var_idno + var_resid)
+icc_target  <- var_target / (var_cntry + var_region + var_target + var_idno + var_resid)
+icc_idno    <- var_idno   / (var_cntry + var_region + var_target + var_idno + var_resid)
+
+knitr::kable(
+  data.frame("Random effect" = c("Country","Region","Target","Participant"),
+           ICC = c(icc_cntry,icc_region,icc_target,icc_idno)),
+  format = "html") %>%
+  kableExtra::kable_styling(full_width = TRUE, bootstrap_options = c("striped", "hover")) %>%
+  kableExtra::row_spec(0, italic = T)
+
+```
+
+*Prejudice target* variance remains highest. Nonetheless, participant seems also to be a relevant cluster, speaking in favor of inter-individial differences. **The next step is to model nested clusters**.
+
+#### Model 4: Target nested in Regions
+
+First, keep it simple. These models (nesting structure) have convergence problems, if we model three levels like target nested in region nested in country. Therefore, the first nesting structure is as simple as it gets and it looks like this: `prejudice ~ 1 + (1|region/target)`.
+
+```{r}
+mlm_s2_m4 <- lmer(prejudice ~ 1 + (1|region/target), data = ess4_mlm)
+summary(mlm_s2_m4)
+performance::icc(mlm_s2_m4)
+```
+
+```{r}
+#| echo: FALSE
+#| output: TRUE
+vc <- as.data.frame(VarCorr(mlm_s2_m4))
+
+var_ta_reg   <- vc[vc$grp == "target:region", "vcov"]
+var_region   <- vc[vc$grp == "region", "vcov"]
+var_resid  <- attr(VarCorr(mlm_s2_m4), "sc")^2
+
+icc_ta_reg   <- var_ta_reg  / (var_ta_reg + var_region + var_resid)
+icc_region  <- var_region / (var_ta_reg + var_region + var_resid)
+
+
+knitr::kable(
+  data.frame("Random effect" = c("Target:Region","Region"),
+           ICC = c(icc_ta_reg,icc_region)),
+  format = "html") %>%
+  kableExtra::kable_styling(full_width = TRUE, bootstrap_options = c("striped", "hover")) %>%
+  kableExtra::row_spec(0, italic = T)
+
+```
+
+What we see, is that the biggest proportion of variance is explained by the *target in region* intercation (their nesting). Now testing this for the country variable.
+
+#### Model 5: Target nested in Country
+
+Next, keep it simple, again. The second nesting structure is as simple as it gets and it looks like this: `prejudice ~ 1 + (1|country/target)`.
+
+```{r}
+mlm_s2_m5 <- lmer(prejudice ~ 1 + (1|cntry_cde/target), data = ess4_mlm)
+summary(mlm_s2_m5)
+performance::icc(mlm_s2_m5)
+```
+
+```{r}
+#| echo: FALSE
+#| output: TRUE
+vc <- as.data.frame(VarCorr(mlm_s2_m5))
+
+var_ta_cntry   <- vc[vc$grp == "target:cntry_cde", "vcov"]
+var_country   <- vc[vc$grp == "cntry_cde", "vcov"]
+var_resid  <- attr(VarCorr(mlm_s2_m5), "sc")^2
+
+icc_ta_cntry <- var_ta_cntry  / (var_ta_cntry + var_country + var_resid)
+icc_country   <- var_country / (var_ta_cntry + var_country + var_resid)
+
+
+knitr::kable(
+  data.frame("Random effect" = c("Target:Country","Country"),
+           ICC = c(icc_ta_cntry,icc_country)),
+  format = "html") %>%
+  kableExtra::kable_styling(full_width = TRUE, bootstrap_options = c("striped", "hover")) %>%
+  kableExtra::row_spec(0, italic = T)
+
+```
+
+Same as above, nesting of *target* explains most variance in this model. However, ICC is hier for the regional nesting.
+
+#### Model 6: Target nested in Region, Participant as random effect
+
+Next, we add *participant* since this cluster also seems relevant. Model looks like this: `prejudice ~ 1 + (1|region/target) + (1|participant) `.
+
+```{r}
+mlm_s2_m6 <- lmer(prejudice ~ 1 + (1|region/target) + (1|idno), data = ess4_mlm)
+summary(mlm_s2_m6)
+```
+
+The model fails to converge.
+
+```{r}
+#| echo: FALSE
+#| output: TRUE
+vc <- as.data.frame(VarCorr(mlm_s2_m6))
+
+var_idno  <- vc[vc$grp == "idno", "vcov"]
+var_ta_reg   <- vc[vc$grp == "target:region", "vcov"]
+var_region   <- vc[vc$grp == "region", "vcov"]
+var_resid  <- attr(VarCorr(mlm_s2_m4), "sc")^2
+
+icc_idno   <- var_idno  / (var_idno + var_ta_reg + var_region + var_resid)
+icc_ta_reg   <- var_ta_reg  / (var_idno + var_ta_reg + var_region + var_resid)
+icc_region  <- var_region / (var_idno + var_ta_reg + var_region + var_resid)
+
+
+knitr::kable(
+  data.frame("Random effect" = c("Paricipant","Target:Region","Region"),
+           ICC = c(icc_idno,icc_ta_reg,icc_region)),
+  format = "html") %>%
+  kableExtra::kable_styling(full_width = TRUE, bootstrap_options = c("striped", "hover")) %>%
+  kableExtra::row_spec(0, italic = T)
+
+```
+
+#### Model 7: Target nested in Region, Participant as random effect
+
+Last (for now), we're getting wild. We add *traditionalism* as fixed effect and *+-1SD subgroups in Traditionalism* as random effect. We also have participants as random effect. Model looks like this: `prejudice ~ traditionalism + (1|region/target) + (1|participant) + (1|traditionalism 1SD split)`.
+
+The idea is the following:
+
+**Target nested in Region:** This should resemble the variance explained by the prejudiec target mean within a region
+
+**Participants:** This should resemble the variance explained by the individual differences (not measured)
+
+**Radom effect of Traditionalism Subsample Split:** This should resemble the variance explained by differences in Traditionalism (+- 1SD) *across* regions
+
+**Fixed effect Traditionalism:** This should resemble the overall effect of Traditionalism on prejudice 
+
+What do you think?? Do you think that this idea and modelling is valid?
+
+
+```{r}
+mlm_s2_m7 <- lmer(prejudice ~ trd + (1|region/target) + (1|idno) + (1|trd_1sd_split), data = ess4_mlm)
+summary(mlm_s2_m7)
+```
+
+
+```{r}
+#| echo: FALSE
+#| output: TRUE
+vc <- as.data.frame(VarCorr(mlm_s2_m7))
+
+var_idno  <- vc[vc$grp == "idno", "vcov"]
+var_ta_reg   <- vc[vc$grp == "target:region", "vcov"]
+var_region   <- vc[vc$grp == "region", "vcov"]
+var_trd_splt   <- vc[vc$grp == "trd_1sd_split", "vcov"]
+var_resid  <- attr(VarCorr(mlm_s2_m7), "sc")^2
+
+icc_idno     <- var_idno     / (var_idno + var_ta_reg + var_region + var_trd_splt + var_resid)
+icc_ta_reg   <- var_ta_reg   / (var_idno + var_ta_reg + var_region + var_trd_splt + var_resid)
+icc_region   <- var_region   / (var_idno + var_ta_reg + var_region + var_trd_splt + var_resid)
+icc_trd_splt <- var_trd_splt / (var_idno + var_ta_reg + var_region + var_trd_splt + var_resid)
+
+
+knitr::kable(
+  data.frame("Random effect" = c("Participant","Target:Region","Region","Traditionalism Split"),
+           ICC = c(icc_idno,icc_ta_reg,icc_region,icc_trd_splt)),
+  format = "html") %>%
+  kableExtra::kable_styling(full_width = TRUE, bootstrap_options = c("striped", "hover")) %>%
+  kableExtra::row_spec(0, italic = T)
+
+```
+
+The *target in region* explains by far the most variance in the DV. We can test this against a competing model, where we nest *participants in regions*. This model looks like this: `prejudice ~ traditionalism + (1|region/participant) + (1|target) + (1|traditionalism 1SD split)`.
+
+#### Model 8: Participant nested in Region, Target as random effect
+
+```{r}
+mlm_s2_m8 <- lmer(prejudice ~ trd + (1|region/idno) + (1|target) + (1|trd_1sd_split), data = ess4_mlm)
+summary(mlm_s2_m8)
+```
+
+
+```{r}
+#| echo: FALSE
+#| output: TRUE
+vc <- as.data.frame(VarCorr(mlm_s2_m8))
+
+var_idno_reg  <- vc[vc$grp == "idno:region", "vcov"]
+var_target   <- vc[vc$grp == "target", "vcov"]
+var_region   <- vc[vc$grp == "region", "vcov"]
+var_trd_splt   <- vc[vc$grp == "trd_1sd_split", "vcov"]
+var_resid  <- attr(VarCorr(mlm_s2_m7), "sc")^2
+
+icc_idno_reg     <- var_idno_reg / (var_idno_reg + var_target + var_region + var_trd_splt + var_resid)
+icc_target   <- var_target   / (var_idno_reg + var_target + var_region + var_trd_splt + var_resid)
+icc_region   <- var_region   / (var_idno_reg + var_target + var_region + var_trd_splt + var_resid)
+icc_trd_splt <- var_trd_splt / (var_idno_reg + var_target + var_region + var_trd_splt + var_resid)
+
+
+knitr::kable(
+  data.frame("Random effect" = c("Participant:Region","Target","Region","Traditionalism Split"),
+           ICC = c(icc_idno_reg,icc_target,icc_region,icc_trd_splt)),
+  format = "html") %>%
+  kableExtra::kable_styling(full_width = TRUE, bootstrap_options = c("striped", "hover")) %>%
+  kableExtra::row_spec(0, italic = T)
+
+```
+
+We see that the *target* even if we don't nest it within the region, still explaines the most variance. However, the ICC of the target ist lower, of course, as target means differ between regions, which this model doesn't account for. The *participant within region*, in contrast, do not gain much in explained variance.
+
+## Spacial Dependencies
+
+Reviewer 1 writes:
+
+"*I also found myself struggling with Figure 3. It took me a lot longer to unpack what the figure is conveying than I expected it to. I’m also puzzled by the part of the caption note that states “’Prejudice hierarchies’ can be obtained for four out of the 29 countries.” I interpret this to mean that the authors looked through versions of the graphs that are depicted in Figure 3 and found two sets of two that resemble each other. Is that correct, or did they do something more systematic? As they note, Latvia and Estonia are neighbors, as are Belgium and the Netherlands – which got me thinking about spatial dependencies. A fundamental rule of geography is that all things are related, but things that are located more closely together are also more closely related. Such spatial dependency can potentially violate the assumption of independent observations that underpins most of the statistical tests that psychologists routinely use. Indeed, the goal of multilevel modeling is to account for some degree of clustering (e.g., responses nested within individuals, individuals nested within countries). However, multilevel modeling doesn’t account for the fact that some countries (e.g., Belgium & Netherlands) are more mutually interdependent than are other countries (e.g., Belgium & Latvia) – and failing to account for such interdependence can inflate effect sizes & lead to Type I error."*
+
+```{r}
+#| include: FALSE
+
+geodata <- eurostat::get_eurostat_geospatial(nuts_level = 0, year = 2016) %>%
+  rename("cntry_cde" = "CNTR_CODE")
+
+prj_mean <- 
+  ess4 %>%
+  select(cntry_cde,starts_with("prj_")) %>%
+  group_by(cntry_cde) %>%
+  mutate(across(starts_with("prj_"),~mean(.,na.rm = T))) %>%
+  unique() %>%
+  ungroup()
+```
+
+I read the Ebert et al. (2023) tutorial and right now, I'm not sure how exactly we can implement these spatial dependencies in our research question at hand. I'm not exhaustively researched the literature but for now, I didn't find an approach in combination wit multilevel modelling. However, we can get the spatial-contingency in our data and create a weights matrix. With this indormation, we can **compute Maroan's I**, which is an indicator for spatial dependency (Morian's I from -1 to +1).
+
+**How the dataset looks like:**
+```{r}
+#first, get geo data into ESS Data
+geodata <- 
+  inner_join(geodata, #from eurostat with geo information about the borders od the countries 
+             prj_mean,#mean prejudice ratings at the country level from the ESS data 
+  by = "cntry_cde") %>%
+  select(cntry_cde,NAME_LATN,starts_with("prj"),geometry)
+
+head(geodata)
+```
+
+
+**Finding neighbours.** Ebert et al (2023) write:
+
+*"Thereby, we classify spatial weights matrices according to (a) whether they rely on binary or nonbinary weights and (b) whether they rely on shared boundaries or distance. The most widely used spatial weights matrix is a spatial-contiguity matrix, in which geographical units are assumed to interact if they share a border (and assumed to not interact if they do not share a border). This adjacency-based definition can also be transformed into a nonbinary matrix. For example, we could additionally consider how long the shared border is and assign higher weights when the shared border is longer."*
+
+```{r}
+nb <- spdep::poly2nb(geodata) #neighbouring countries
+weight_matrix <- spdep::nb2listw(nb, style = "W", zero.policy = TRUE) #create weights matrix
+summary(weight_matrix)
+```
+
+**Calculate Moran's I**
+
+Ebert et al.: *"To summarize, Moran’s I offers a straightforward metric that captures whether geographical clustering is generally present in the data and returns this information in a single value."*
+
+*"Moran’s I values can range from –1 to þ1, whereby –1 indicates perfect clustering of dissimilar values (or perfect dispersion), 0 indicates no clustering (or perfect randomness), and þ1 indicates perfect clustering of similar values"*
+
+```{r}
+spdep::moran.test(geodata$prj_immigrants, listw = weight_matrix)
+spdep::moran.test(geodata$prj_homosexuals, listw = weight_matrix)
+spdep::moran.test(geodata$prj_unemployed, listw = weight_matrix)
+spdep::moran.test(geodata$prj_women, listw = weight_matrix)
+spdep::moran.test(geodata$prj_people20, listw = weight_matrix)
+spdep::moran.test(geodata$prj_people70, listw = weight_matrix)
+```
+
+We find significant positve values of Moran's I for prejudice towards *Immigrants, Homosexuals and Women*. For *Unemployed, People in their 20s, and People in their 70s*, Moran's I is not significant, but values are still positive, except for 'People in their 70s' (close to 0). 
+
+**Calculate Getis-Ord Gi**
+
+Ebert et al: *"In contrast [to Moran's I], Getis-Ord Gi offers a more nuanced, localized understanding of geographical clustering, including questions such as where clusters are located, how those clusters differ in strength, and which units they are comprised of."*
+
+Only for prejudice target *Homosexual people* because this has the highes Moran's I.
+
+```{r}
+getis <- spdep::localG(geodata$prj_homosexuals, listw = weight_matrix)
+groups_getis <- findInterval(getis, c(-1.96, 1.96))  
+groups_getis <- as.factor(groups_getis)  
+
+
+ggplot() +
+  geom_sf(data = geodata, aes(fill = groups_getis), color = "black") +
+  scale_fill_manual(
+  values = c("#0a6fb6", "#f1f1f1", "#FF4F6B", "grey80"),
+  na.value = "grey80",
+  labels = c("Cold-Spot", "Not significant", "Hot-Spot", "No shared border"),
+  name = "Getis-Ord Gi") +
+  theme_minimal()
+```
+

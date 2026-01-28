@@ -1,0 +1,48 @@
+---
+title: "Supplementary Materials"
+format:
+  html:
+    theme: default
+---
+
+```{r}
+#| include: FALSE
+library(tidyverse)
+library(kableExtra)
+
+cdbk_1b <- openxlsx::read.xlsx("C:/Users/Clemens Lindner/Documents/github/bigot_and_tolerant_personalites/0_data/three_challenges_codebook.xlsx", sheet = 2) %>%
+  mutate(variable = tolower(variable))
+```
+
+```{r}
+#| echo: FALSE
+#| output: TRUE
+
+cdbk_1b %>%
+  filter(scale == "RWA") %>%
+  select(german_item_original,english_item_translation, subscale) %>%
+  mutate(subscale = str_to_title(str_replace_all(subscale,"_"," "))) %>%
+  rename("Orginal Item" = "german_item_original",
+         "English translation" = "english_item_translation",
+         "Subscale" = "subscale") %>%
+  kbl() %>%
+  kable_styling()
+
+```
+
+```{r}
+#| echo: FALSE
+#| output: TRUE
+
+cdbk_1b %>%
+  filter(scale == "SDO") %>%
+  select(german_item_original,english_item_translation, coding) %>%
+  mutate(coding = case_when(is.na(coding) ~ "pro-trait",
+                            TRUE ~ "con-trait")) %>%
+  rename("Orginal Item" = "german_item_original",
+         "English translation" = "english_item_translation",
+         "Coding" = "coding") %>%
+  kbl() %>%
+  kable_styling()
+
+```
