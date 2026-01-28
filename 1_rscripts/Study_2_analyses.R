@@ -587,3 +587,150 @@ std2_means <-
 
   
 ggsave(file = "./4_plots/std2_means.jpeg",width = 10, height = 10)
+
+
+
+
+
+
+
+
+
+
+
+
+library(lme4)
+
+bootstrap_icc <- function(model,
+                          iterations,
+                          type) {
+  
+  # ------------------------------------------------------------
+  # helper: smart rounding
+  # ------------------------------------------------------------
+  smart_round <- function(x, digits = 2, max_digits = 6) {
+    for (d in digits:max_digits) {
+      r <- round(x, d)
+      if (r != 0) {
+        return(formatC(r, format = "f", digits = d))
+      }
+    }
+    formatC(0, format = "f", digits = max_digits)
+  }
+  
+  # ------------------------------------------------------------
+  # summary function
+  # ------------------------------------------------------------
+  mysumm <- function(m) {
+    
+    sigma2 <- getME(m, "sigma")^2
+    
+    taus <- (getME(m, "theta") * getME(m, "sigma"))^2
+    names(taus) <- names(getME(m, "cnms"))
+    
+    total_var <- sigma2 + sum(taus)
+    
+    ICCs <- taus / total_var
+    
+    c(
+      sigma2 = sigma2,
+      setNames(taus, paste0("tau2_", names(taus))),
+      setNames(ICCs, paste0("ICC_", names(ICCs))),
+      vp_residual = sigma2 / total_var
+    )
+  }
+  
+  # ------------------------------------------------------------
+  # bootstrap
+  # ------------------------------------------------------------
+  boot <- bootMer(
+    model,
+    FUN = mysumm,
+    nsim = iterations,
+    type = type,
+    use.u = FALSE
+  )
+  
+  # ------------------------------------------------------------
+  # results table
+  # ------------------------------------------------------------
+  results <- data.frame(
+    observed = boot$t0,
+    CI_norm  = NA_character_,
+    CI_basic = NA_character_,
+    CI_perc  = NA_character_
+  )
+  
+  # ------------------------------------------------------------
+  # confidence intervals
+  # ------------------------------------------------------------
+  for (i in seq_len(nrow(results))) {
+    
+    ci <- boot::boot.ci(
+      boot,
+      index = i,
+      conf = .95,
+      type = c("norm", "basic", "perc")
+    )
+    
+    results$CI_norm[i]  <- paste0(
+      "[",
+      smart_round(ci$normal[2]), ", ",
+      smart_round(ci$normal[3]), "]"
+    )
+    
+    results$CI_basic[i] <- paste0(
+      "[",
+      smart_round(ci$basic[4]), ", ",
+      smart_round(ci$basic[5]), "]"
+    )
+    
+    results$CI_perc[i]  <- paste0(
+      "[",
+      smart_round(ci$percent[4]), ", ",
+      smart_round(ci$percent[5]), "]"
+    )
+  }
+  
+  results
+}
+
+ds1_long <-
+  ds1 %>%
+  select(case,rwa,sdo,all_of(trgt.itms.1a)) %>%
+  pivot_longer(cols = all_of(trgt.itms.1a),
+               names_to = "target",
+               values_to = "rating")
+
+
+
+model1a_rwa = lmer(rating ~ 1 + (1|case) + (1|target) + (1|rwa), data = ds1_long)
+model1a_sdo = lmer(rating ~ 1 + (1|case) + (1|target) + (1|sdo), data = ds1_long)
+
+summary(model1a_rwa)
+summary(model1a_sdo)
+
+
+
+ds2_long <-
+  ds2 %>%
+  select(case,rwa,sdo,all_of(trgt.itms.1b)) %>%
+  pivot_longer(cols = all_of(trgt.itms.1b),
+               names_to = "target",
+               values_to = "rating")
+
+
+
+model1b_rwa = lmer(rating ~ 1 + (1|case) + (1|target) + (1|rwa), data = ds2_long)
+model1b_sdo = lmer(rating ~ 1 + (1|case) + (1|target) + (1|sdo), data = ds2_long)
+
+summary(model1b_rwa)
+summary(model1b_sdo)
+
+bootstrap_icc(model = model1b_rwa,
+              iterations = 1000,
+              type = "parametric")
+
+bootstrap_icc(model = model1b_sdo,
+              iterations = 1000,
+              type = "parametric")
