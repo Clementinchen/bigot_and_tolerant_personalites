@@ -26,36 +26,10 @@ rename_vars.1a <- setNames(cdbk_1a %>%
 ds1 <- ds1 %>%
   rename_with(~ rename_vars.1a[.],.cols = all_of(names(rename_vars.1a)))
 
-ds1 <- ds1 %>%
-  select(case:mode,
-         starts_with("rwa"),
-         starts_with("sdo"),
-         starts_with("prj"),
-         age:ncol(.))
-
-ds1 <- 
-  ds1 %>%
-  mutate(
-    gender = factor(gender),
-    gender = forcats::fct_recode(gender,
-                                 "female" = "2",
-                                 "male"   = "1",
-                                 "divers" = "3"),
-    gender = case_when(gender == "4" ~ NA, TRUE ~ gender),
-    education = factor(education,  levels = c("1","2","3","4","5","6","7")),
-    education = forcats::fct_recode(education,
-                                    "isced_1" = "1",
-                                    "isced_2" = "2",
-                                    "isced_2" = "3",
-                                    "isced_3" = "4",
-                                    "isced_4" = "5",
-                                    "isced_6" = "6",
-                                    "isced_6" = "7")
-    )
 
 ## PREDICTORS ----
 
-prdctrs <- c("rwa","sdo","polid")
+prdctrs <- c("rwa","sdo","con","mi","polid")
 
 ### RWA ----
 
@@ -91,6 +65,42 @@ psych::alpha(ds1[,sdo.itms])
 #score
 ds1$sdo <- rowMeans(ds1[,sdo.itms], na.rm = TRUE)
 
+### CONSERVATISM ----
+
+#recode items
+
+ds1 <- 
+  ds1 %>% 
+  mutate(across(c(cdbk_1a %>%
+                    filter(scale == "Conservatism" & coding == "reversed") %>%
+                    select(variable_label) %>% pull()), ~ 12 - .))
+
+
+#conservatism items
+con.itms <- 
+  ds1 %>% select(starts_with("con_")) %>% names()
+
+#alpha
+psych::alpha(ds1[,con.itms], check.keys = T)
+
+#score
+ds1$con <- rowMeans(ds1[,con.itms],na.rm = TRUE)
+
+### MERITOCRACY ----
+
+#meritocracy items
+mi.itms <- 
+  ds1 %>% select(starts_with("mi_")) %>% names()
+
+fa_mi.1a <- factanal(na.omit(ds1[,mi.itms]), factors = 2, rotation = "varimax")
+fa_mi.1a
+
+#alpha
+psych::alpha(ds1[,mi.itms])
+
+#score
+ds1$mi<-rowMeans(ds1[,mi.itms], na.rm = TRUE)
+
 
 ## DV: TARGETS ----
 
@@ -124,9 +134,9 @@ fa_trgts.1a <-
                                            TRUE ~ "conservative")))
 
 sjPlot::tab_fa(ds1 %>%
-                  select(starts_with("prj_")), 
-                nmbr.fctr = 2, 
-                rotation = "oblimin",
+                 select(starts_with("prj_")), 
+               nmbr.fctr = 2, 
+               rotation = "oblimin",
                method = "ml",
                file = "./2_tables/fa_study_1a.html")
 
@@ -183,125 +193,46 @@ ds1 %>%
   rename("Variable 1" = "Parameter1","Variable 2" = "Parameter2","N" = "n_Obs") %>%
   select(1,2,8,3,4,7)
 
+
 ds1 %>%
-  select(rwa,sdo,ta_lib,ta_con) %>%
-  correlation::correlation(., method = "pearson",missing = "keep_pairwise") %>%
-  data.frame() %>%
-  filter((Parameter1 == "rwa"|Parameter1 == "sdo") & stringr::str_detect(Parameter2,"ta")) %>%
-  mutate(p = p.adjust(p,"bonferroni"),
-         p = case_when(
-           p < 0.001 ~ "p < .001***",
-           p < 0.01  ~ "p < .01**",
-           p < 0.05  ~ "p < .05*",
-           TRUE      ~ as.character(round(p,3))
-         ),
-         "95% CI" = paste0("[",
-                           format(round(CI_low,2),nsmall = 2),
-                           ", ",
-                           format(round(CI_high,2),nsmall = 2),
-                           "]"),
-         r = format(round(r,2),nsmall = 2),
-         Parameter1 = stringr::str_to_upper(Parameter1),
-         Parameter2 = stringr::str_remove_all(Parameter2,"prj_"),
-         Parameter2 = case_when(Parameter2 == "ta_lib" ~ "Liberal Target",
-                                Parameter2 == "ta_con" ~ "Conservative Target",
-                                T ~ Parameter2)
-  ) %>%
-  rename("Variable 1" = "Parameter1","Variable 2" = "Parameter2","N" = "n_Obs") %>%
-  select('Variable 1','Variable 2', N, r , '95% CI',p) 
-  
-
-
-biv_r_rwa <- 
-  ds1 %>%
   select(rwa,all_of(trgt.itms.1a)) %>%
   correlation::correlation(., method = "pearson",missing = "keep_pairwise",p_adjust = "none") %>%
   as.data.frame() %>%
   filter(Parameter1 == "rwa") %>%
   mutate(p = p.adjust(p,"bonferroni"),
-         p = case_when(
-           p < 0.001 ~ "p < .001***",
-           p < 0.01  ~ "p < .01**",
-           p < 0.05  ~ "p < .05*",
-           TRUE      ~ as.character(round(p,3))
-                                    ),
-         "95% CI" = paste0("[",
-                           format(round(CI_low,2),nsmall = 2),
-                           ", ",
-                           format(round(CI_high,2),nsmall = 2),
-                           "]"),
-         r = format(round(r,2),nsmall = 2),
-         Parameter1 = stringr::str_to_upper(Parameter1),
-         Parameter2 = stringr::str_remove_all(Parameter2,"prj_"),
-         Parameter2 = stringr::str_replace_all(Parameter2,"_"," "),
-         Parameter2 = stringr::str_to_title(Parameter2)
-           ) %>%
-  rename("Variable 1" = "Parameter1","Variable 2" = "Parameter2","N" = "n_Obs") %>%
-  select('Variable 1','Variable 2', N, r , '95% CI',p)
-
-biv_r_rwa
+         p = )
 
 
-biv_r_sdo <- 
-  ds1 %>%
-  select(sdo,all_of(trgt.itms.1a)) %>%
-  correlation::correlation(., method = "pearson",missing = "keep_pairwise",p_adjust = "none") %>%
-  as.data.frame() %>%
-  filter(Parameter1 == "sdo") %>%
-  mutate(p = p.adjust(p,"bonferroni"),
-         p = case_when(
-           p < 0.001 ~ "p < .001***",
-           p < 0.01  ~ "p < .01**",
-           p < 0.05  ~ "p < .05*",
-           TRUE      ~ as.character(round(p,3))
-         ),
-         "95% CI" = paste0("[",
-                           format(round(CI_low,2),nsmall = 2),
-                           ", ",
-                           format(round(CI_high,2),nsmall = 2),
-                           "]"),
-         r = format(round(r,2),nsmall = 2),
-         Parameter1 = stringr::str_to_upper(Parameter1),
-         Parameter2 = stringr::str_remove_all(Parameter2,"prj_"),
-         Parameter2 = stringr::str_replace_all(Parameter2,"_"," "),
-         Parameter2 = stringr::str_to_title(Parameter2)
-  ) %>%
-  rename("Variable 1" = "Parameter1","Variable 2" = "Parameter2","N" = "n_Obs") %>%
-  select('Variable 1','Variable 2', N, r , '95% CI',p)
+biv_r <- matrix(nrow = length(trgt.itms.1a), ncol = 4)
+rownames(biv_r) <- trgt.itms.1a
+colnames(biv_r) <- c("rwa","rwa.p","sdo","sdo.p")
+rwa_sdo <- c("rwa","sdo")
 
-biv_r_sdo
+# Loop through each pair of predictor and target variable
+for (tgt in trgt.itms.1a) {
+  for (prd in rwa_sdo) {
+    # Perform correlation test
+    test_result <- cor.test(ds1[[prd]], ds1[[tgt]])
+    # Store the p-value in the results matrix
+    biv_r[tgt, prd] <- round(test_result$estimate,2)
+    biv_r[tgt, paste0(prd,".p")] <- round(test_result$p.value,3)
+    
+  }
+}
 
+biv_r %>%
+  data.frame() %>%
+  tibble::rownames_to_column("target") %>%
+  tibble::as_tibble() %>%
+  arrange(rwa) %>% print(n = 40)
 
 ### Correlations Target Factors
 
 ds1 %>%
-  select(rwa,sdo,ta_lib,ta_con) %>%
-  correlation::correlation(., method = "pearson",missing = "keep_pairwise",p_adjust = "none") %>%
-  as.data.frame() %>%
-  mutate(p = p.adjust(p,"bonferroni"),
-         p = case_when(
-           p < 0.001 ~ "p < .001***",
-           p < 0.01  ~ "p < .01**",
-           p < 0.05  ~ "p < .05*",
-           TRUE      ~ as.character(round(p,3))
-         ),
-         "95% CI" = paste0("[",
-                           format(round(CI_low,2),nsmall = 2),
-                           ", ",
-                           format(round(CI_high,2),nsmall = 2),
-                           "]"),
-         r = format(round(r,2),nsmall = 2),
-         Parameter1 = stringr::str_to_upper(Parameter1),
-         Parameter2 = stringr::str_to_upper(Parameter2),
-         Parameter1 = case_when(Parameter1 == "TA_LIB" ~ "Liberal Targets",
-                                T ~ Parameter1),
-         Parameter2 = case_when(Parameter2 == "TA_LIB" ~ "Liberal Targets",
-                                Parameter2 == "TA_CON" ~ "Conservative Targets",
-                                T ~ Parameter2)
-         
-  ) %>%
-  rename("Variable 1" = "Parameter1","Variable 2" = "Parameter2","N" = "n_Obs") %>%
-  select('Variable 1','Variable 2', N, r , '95% CI',p)
+  select(all_of(rwa_sdo),ta_lib,ta_con) %>%
+  rstatix::cor_mat() %>%
+  rstatix::cor_mark_significant(cutpoints = c(0, 0.001, 0.01, 0.05, 1),
+                                symbols = c("***", "**", "*", ""))
 
 ### PARTIAL CORRELATIONS -----
 
@@ -323,15 +254,6 @@ rbind(
   select(target_scale,rwa,sdo,partial) %>%
   tidyr::pivot_wider(names_from = "partial", values_from = c("rwa","sdo"))
 
-ds1 %>%
-  select(rwa,sdo,polid,ta_lib,ta_con) %>%
-  correlation::correlation(partial = F) %>%
-  data.frame()
-
-ds1 %>%
-  select(rwa,polid,ta_lib) %>%
-  correlation::correlation(partial = F) %>%
-  data.frame()
 
 ## IDEOLOGICAL CONFLICT ----
 
@@ -354,6 +276,12 @@ ds1 %>%
     ~ broom::tidy(lm(rating ~ predictor_scl*trgt_fct, data = .))
   )
 
+
+m1 <- lm(rating ~ rwa_scl*trgt_fct, data = lm_int)
+summary(m1)
+
+m2 <- lm(rating ~ sdo_scl*trgt_fct, data = lm_int)
+summary(m2)
 
 
 ## Plot
@@ -404,9 +332,9 @@ prej_cent.1a <-
             by = c("case","target")
   )
 
-         
+
 prej_cent.1a <- 
-prej_cent.1a %>%
+  prej_cent.1a %>%
   tidyr::pivot_longer(cols = c(rwa,sdo),
                       names_to = "scale",
                       values_to = "score") %>%
@@ -433,30 +361,14 @@ prej_cent.1a %>%
          low_scl,high_scl,diff_scl)
 
 list(data = prej_cent.1a,
-means = prej_cent.1a %>%
-  summarise_if(is.numeric,mean, na.rm = TRUE),
-sd = prej_cent.1a %>%
-  summarise_if(is.numeric,sd, na.rm = TRUE),
-corr = prej_cent.1a %>% summarise(r_raw = cor(low_raw,high_raw),
-                              r_gmc = cor(low_gmc,high_gmc),
-                              r_scl = cor(low_scl,high_scl))
+     means = prej_cent.1a %>%
+       summarise_if(is.numeric,mean, na.rm = TRUE),
+     sd = prej_cent.1a %>%
+       summarise_if(is.numeric,sd, na.rm = TRUE),
+     corr = prej_cent.1a %>% summarise(r_raw = cor(low_raw,high_raw),
+                                       r_gmc = cor(low_gmc,high_gmc),
+                                       r_scl = cor(low_scl,high_scl))
 )
-
-
-prej_cent.1a %>% 
-  select(!ends_with("_diff")) %>% 
-  correlation::correlation() %>%
-  data.frame() %>%
-  filter(
-    (Group == "rwa" & Parameter1 == "low_raw" & Parameter2 == "high_raw") |
-      (Group == "rwa" & Parameter1 == "low_gmc" & Parameter2 == "high_gmc") |
-      (Group == "rwa" & Parameter1 == "low_scl" & Parameter2 == "high_scl") |
-      (Group == "sdo" & Parameter1 == "low_raw" & Parameter2 == "high_raw") |
-      (Group == "sdo" & Parameter1 == "low_gmc" & Parameter2 == "high_gmc") |
-      (Group == "sdo" & Parameter1 == "low_scl" & Parameter2 == "high_scl")
-  ) %>%
-  mutate(p = p.adjust(p, method = "bonferroni"))
-
 
 ## SHARED PREJUDICE ----
 
@@ -480,25 +392,14 @@ split.1a <-
                      values_from = c("high","low","diff"),
                      names_glue = "{scale}_{.value}") %>%
   ungroup()
-  
-  
+
+
 list(data = split.1a,
      means = split.1a %>%
        summarise_if(is.numeric,mean, na.rm = TRUE),
      sd = split.1a %>%
        summarise_if(is.numeric,sd, na.rm = TRUE),
      corr = split.1a %>% select(!ends_with("_diff")) %>% corrr::correlate())
-
-
-split.1a %>% 
-  select(!ends_with("_diff")) %>% 
-  correlation::correlation() %>%
-  data.frame() %>%
-  filter(
-    (Parameter1 == "rwa_high" & Parameter2 == "rwa_low") |
-      (Parameter1 == "sdo_high" & Parameter2 == "sdo_low")
-  ) %>%
-  mutate(p = p.adjust(p, method = "bonferroni"))
 
 ### VARIANCE DECOMPOSITION ----
 
@@ -533,11 +434,11 @@ ds1 %>%
   tidyr::pivot_longer(cols = 1:ncol(.),names_to = "variable") %>%
   #group_by(variable) %>%
   reframe(Mean = mean(value, na.rm = T),
-            SD = sd(value, na.rm = T),
-            Median = median(value, na.rm = T),
-            Min = min(value,na.rm = T),
-            Max = max(value, na.rm = T),
-            range = abs(Max-Min),
+          SD = sd(value, na.rm = T),
+          Median = median(value, na.rm = T),
+          Min = min(value,na.rm = T),
+          Max = max(value, na.rm = T),
+          range = abs(Max-Min),
           .by = variable) %>%
   print(n = nrow(.))
 

@@ -1,0 +1,502 @@
+---
+title: "Collective Nature of Prejudice Revision"
+format:
+  html:
+    theme: cosmo
+    toc: true
+    toc-location: left
+    toc-depth: 5
+    
+---
+
+```{r libraries}
+#| include: FALSE
+library(tidyverse)
+library(lme4)
+```
+
+
+```{r get data}
+#| include: FALSE
+
+setwd("C:/Users/Clemens Lindner/Documents/github/bigot_and_tolerant_personalites")
+
+ds1 <- read.csv(file = './0_data/rwa_sdo_revisited_study_1a.csv', 
+                header = TRUE, sep = ",", as.is = T, na.strings = c("-1","-9",NA))  %>%
+  janitor::clean_names(.)
+
+
+#get codebook
+cdbk_1a <- openxlsx::read.xlsx("./0_data/three_challenges_codebook.xlsx", sheet = 1) %>%
+  mutate(variable = tolower(variable))
+
+
+rename_vars.1a <- setNames(cdbk_1a %>%
+                             pull(variable_label),
+                           cdbk_1a %>%
+                             pull(variable))
+
+ds1 <- ds1 %>%
+  rename_with(~ rename_vars.1a[.],.cols = all_of(names(rename_vars.1a)))
+
+ds1 <- ds1 %>%
+  select(case:mode,
+         starts_with("rwa"),
+         starts_with("sdo"),
+         starts_with("prj"),
+         age:ncol(.))
+
+## PREDICTORS ----
+
+prdctrs <- c("rwa","sdo","polid")
+
+### RWA ----
+
+#RWA items
+rwa.itms <- 
+  ds1 %>% select(starts_with("rwa_")) %>% names()
+
+#factor analysis
+fa_rwa.1a <- factanal(na.omit(ds1[,rwa.itms]), factors = 1, rotation = "varimax")
+fa_rwa.1a
+
+
+#alpha
+psych::alpha(ds1[,rwa.itms])
+
+#score
+ds1$rwa <- rowMeans(ds1[,rwa.itms], na.rm = TRUE)
+
+
+### SDO ----
+
+#sdo items
+sdo.itms <- 
+  ds1 %>% select(starts_with("sdo_")) %>% names()
+
+#factor analysis
+fa_sdo.1a <- factanal(na.omit(ds1[,sdo.itms]), factors = 2, rotation = "varimax")
+fa_sdo.1a
+
+#alpha
+psych::alpha(ds1[,sdo.itms])
+
+#score
+ds1$sdo <- rowMeans(ds1[,sdo.itms], na.rm = TRUE)
+
+
+## DV: TARGETS ----
+
+#recode
+ds1 <- ds1 %>% mutate(across(starts_with("prj_"), ~ 12 - .))
+
+
+#Targets
+trgt.itms.1a <- 
+  ds1 %>%
+  select(starts_with("prj_")) %>%
+  names()
+
+# STUDY 1B
+
+ds2 <- read.csv(file = './0_data/rwa_sdo_revisited_study_1b.csv', 
+                header = TRUE, sep = ",", as.is = T, na.strings = c("-1","-9",NA))  %>%
+  janitor::clean_names(.)
+
+
+#get codebook
+cdbk_1b <- openxlsx::read.xlsx("./0_data/three_challenges_codebook.xlsx", sheet = 2) %>%
+  mutate(variable = tolower(variable))
+
+
+rename_vars.1b <- setNames(cdbk_1b %>%
+                             pull(variable_label),
+                           cdbk_1b %>%
+                             pull(variable))
+
+ds2 <- ds2 %>%
+  rename_with(~ rename_vars.1b[.],.cols = all_of(names(rename_vars.1b)))
+
+ds2 <- ds2 %>%
+  select(case:mode,
+         starts_with("rwa"),
+         starts_with("sdo"),
+         starts_with("prj"),
+         gender:ncol(.))
+
+## PREDICTORS ----
+
+prdctrs <- c("rwa","sdo","polid")
+
+### RWA ----
+
+#RWA items
+rwa.itms <- 
+  ds2 %>% select(starts_with("rwa_")) %>% names()
+
+#factor analysis
+fa_rwa.1b <- factanal(na.omit(ds2[,rwa.itms]), factors = 1, rotation = "varimax")
+fa_rwa.1b
+
+
+#alpha
+psych::alpha(ds2[,rwa.itms])
+
+#score
+ds2$rwa <- rowMeans(ds2[,rwa.itms], na.rm = TRUE)
+
+
+### SDO ----
+
+#sdo items
+sdo.itms <- 
+  ds2 %>% select(starts_with("sdo_")) %>% names()
+
+#factor analysis
+fa_sdo.1b <- factanal(na.omit(ds2[,sdo.itms]), factors = 2, rotation = "varimax")
+fa_sdo.1b
+
+#alpha
+psych::alpha(ds2[,sdo.itms])
+
+#score
+ds2$sdo <- rowMeans(ds2[,sdo.itms], na.rm = TRUE)
+
+
+## DV: TARGETS ----
+
+#recode
+ds2 <- ds2 %>% mutate(across(starts_with("prj_"), ~ 12 - .))
+
+
+#Targets
+trgt.itms.1b <- 
+  ds2 %>%
+  select(starts_with("prj_")) %>%
+  names()
+
+```
+
+
+# Study 1a and 1b
+
+## Variance decomposition
+
+Reviewer 2 writes:
+
+*The multilevel modeling results reported by the authors show that 20–30% of the total variance is
+observable on the target-level, whereas RWA/SDO explain only 7–12% of the variance between respondents. The
+authors then argue that target-level differences account for the largest share of the variance. This
+comparison is problematic, however, because the respondent-level estimate reflects variance explained by
+predictors (RWA/SDO), while the target-level estimate reflects observed variance. I do not think the approach
+proposed by Rights and Sterba (2019) is appropriate here. A more suitable comparison would involve computing
+the ICC after restructuring the data with targets nested within respondents. This would likely show that more
+variance is obervable on the respondent-level than at the target-level, contradicting the authors’
+interpretation. Another useful approach would be variance decomposition as applied by Koch et al. (2020),
+which the authors cite. This would partition the variance into group variance (consensual differences between
+targets), rater variance (differences between respondents in their overall prejudice), and group × rater
+variance (non-consensual differences between targets). The limitation, however, is that this approach cannot
+disentangle error variance from the group × rater variance.*
+
+Below you find the Koch et al (2020) approach. However, else than Koch et al., we cannot model the target x person interaction because we would need at least two measures of each target within participant. Therefore, the formula is `prejudice ~ 1 + (1 | case) + (1 | target)`.
+
+### Koch et al. (2020) approach
+
+#### Study 1a
+
+##### Model 1: Random effects for Participants and Targets
+```{r rearrange data 1a}
+#| include: FALSE
+
+var_decomp_1a <- 
+  ds1 %>%
+  select(case,rwa,sdo,all_of(trgt.itms.1a)) %>%
+  pivot_longer(cols = all_of(trgt.itms.1a),
+               names_to = "target",
+               values_to = "rating") %>%
+  mutate(target = str_remove(target,"prj_"),
+         target = as_factor(target),
+         case = paste0("case",case))
+```
+
+Data is in long format:
+```{r}
+head(var_decomp_1a)
+```
+
+
+**Fitting the model:**
+```{r}
+
+var_decomp_1a <- 
+  var_decomp_1a %>%
+  filter(complete.cases(.))
+
+mod_a_1a = lmer(rating ~ 1 + (1|case) + (1|target), data = var_decomp_1a)
+summary(mod_a_1a)
+
+```
+
+Descriptively, we see that the variance within target is much bigger than variance within participant.
+
+**Calculating the ICCs for each random effect:**
+```{r}
+#| include: FALSE
+vc <- as.data.frame(VarCorr(mod_a_1a))
+
+var_case   <- vc[vc$grp == "case", "vcov"]
+var_target <- vc[vc$grp == "target", "vcov"]
+var_resid  <- attr(VarCorr(mod_a_1a), "sc")^2
+
+```
+
+```{r}
+# ICCs berechnen
+icc_case   <- var_case / (var_case + var_target + var_resid)
+icc_target <- var_target / (var_case + var_target + var_resid)
+
+icc_case
+icc_target
+
+performance::icc(mod_a_1a)
+```
+
+The ICC of the participant (Variance explained by clustering variable participant) is `r round(icc_case,4)`, the ICC of target (variance explained by clustering variable target) is `r round(icc_target,4)`.
+
+##### Model 2: Fixed effects RWA, SDO, Random effects Participants and Targets
+Now adding RWA and SDO as fixed effects
+```{r}
+mod_rwasdo_1a = lmer(rating ~ rwa + sdo + (1|case) + (1|target), data = var_decomp_1a)
+summary(mod_rwasdo_1a)
+```
+
+**Calculating the ICCs for each random effect:**
+```{r}
+#| include: FALSE
+vc <- as.data.frame(VarCorr(mod_rwasdo_1a))
+
+var_case   <- vc[vc$grp == "case", "vcov"]
+var_target <- vc[vc$grp == "target", "vcov"]
+var_resid  <- attr(VarCorr(mod_rwasdo_1a), "sc")^2
+
+```
+
+```{r}
+# ICCs berechnen
+icc_case   <- var_case / (var_case + var_target + var_resid)
+icc_target <- var_target / (var_case + var_target + var_resid)
+
+icc_case
+icc_target
+
+performance::icc(mod_rwasdo_1a)
+performance::r2(mod_rwasdo_1a)
+
+```
+
+The ICCs remain high even if we introduce fixed effects. The Marginal R^2^ shows that even if we include RWA and SDO as predictors, the much bigger proportion of variance is explained by random effects.
+
+##### Model 3: Random effects for Participants, Targets, RWA subsamples
+Random effects within high vs low RWA / SDO individuals
+
+```{r creating new subgroups 1a}
+#| include: FALSE
+
+var_decomp_1a <- 
+  var_decomp_1a %>%
+  mutate(rwa_med_split = case_when(rwa > median(rwa,na.rm = T) ~ "high",
+                                   rwa < median(rwa,na.rm = T) ~ "low"),
+         rwa_1sd_split = case_when(rwa > (mean(rwa,na.rm = T) + sd(rwa,na.rm = T)) ~ "+1sd",
+                                   rwa < (mean(rwa,na.rm = T) - sd(rwa,na.rm = T)) ~ "-1sd",
+                                   TRUE ~ NA))
+```
+Added 2 new variables that cluster participants (1) along the median split in the high vs. low sample and (2) along the +1 SD in RWA subsample and -1 SD in RWA subsample, respectively. Have a look:
+```{r}
+head(var_decomp_1a)
+```
+
+Now building the new models with specified random effects within the subgroups
+```{r}
+mod_b_1a = lmer(rating ~ 1 + (1|case) + (1|target) + (1|rwa_med_split) + (1|rwa_1sd_split), data = var_decomp_1a)
+summary(mod_b_1a)
+```
+**Calculating the ICCs for each random effect:**
+```{r}
+#| include: FALSE
+vc <- as.data.frame(VarCorr(mod_b_1a))
+
+var_case   <- vc[vc$grp == "case", "vcov"]
+var_target <- vc[vc$grp == "target", "vcov"]
+var_rwa_med_split <- vc[vc$grp == "rwa_med_split", "vcov"]
+var_rwa_1sd_split <- vc[vc$grp == "rwa_1sd_split", "vcov"]
+var_resid  <- attr(VarCorr(mod_b_1a), "sc")^2
+
+```
+
+```{r}
+# ICCs berechnen
+icc_case      <- var_case / (var_case + var_target + var_resid)
+icc_target    <- var_target / (var_case + var_target + var_rwa_med_split + var_rwa_1sd_split + var_resid)
+icc_med_split <- var_rwa_med_split / (var_case + var_target + var_rwa_med_split + var_rwa_1sd_split + var_resid)
+icc_1sd_split <- var_rwa_1sd_split / (var_case + var_target + var_rwa_med_split + var_rwa_1sd_split + var_resid)
+
+icc_case
+icc_target
+icc_med_split
+icc_1sd_split
+
+
+performance::icc(mod_b_1a)
+```
+
+#### Study 1b
+
+##### Model 1: Random effects for Participants and Targets
+```{r rearrange data 1b}
+#| include: FALSE
+
+var_decomp_1b <- 
+  ds2 %>%
+  select(case,rwa,sdo,all_of(trgt.itms.1b)) %>%
+  pivot_longer(cols = all_of(trgt.itms.1b),
+               names_to = "target",
+               values_to = "rating") %>%
+  mutate(target = str_remove(target,"prj_"),
+         target = as_factor(target),
+         case = paste0("case",case))
+```
+
+Data is in long format:
+```{r}
+head(var_decomp_1b)
+```
+
+
+**Fitting the model:**
+```{r}
+
+var_decomp_1b <- 
+  var_decomp_1b %>%
+  filter(complete.cases(.))
+
+mod_a_1b = lmer(rating ~ 1 + (1|case) + (1|target), data = var_decomp_1b)
+summary(mod_a_1b)
+
+```
+
+
+**Calculating the ICCs for each random effect:**
+```{r}
+#| include: FALSE
+vc <- as.data.frame(VarCorr(mod_a_1b))
+
+var_case   <- vc[vc$grp == "case", "vcov"]
+var_target <- vc[vc$grp == "target", "vcov"]
+var_resid  <- attr(VarCorr(mod_a_1b), "sc")^2
+
+```
+
+```{r}
+# ICCs berechnen
+icc_case   <- var_case / (var_case + var_target + var_resid)
+icc_target <- var_target / (var_case + var_target + var_resid)
+
+icc_case
+icc_target
+
+performance::icc(mod_a_1b)
+```
+Again, we see that the variance within target is bigger than variance within participant. However, the variance within participant is much bigger compared to Study 1a. This may be due to the different response scale, 1 - 101 instead of 1 - 11 (Study 1a). 
+
+The ICC of the participant (Variance explained by clustering variable participant) is `r round(icc_case,4)`, the ICC of target (variance explained by clustering variable target) is `r round(icc_target,4)`.
+
+##### Model 2: Fixed effects RWA, SDO, Random effects Participants and Targets
+
+Now adding RWA and SDO as fixed effects
+```{r}
+mod_rwasdo_1b = lmer(rating ~ rwa + sdo + (1|case) + (1|target), data = var_decomp_1b)
+summary(mod_rwasdo_1b)
+```
+
+**Calculating the ICCs for each random effect:**
+```{r}
+#| include: FALSE
+vc <- as.data.frame(VarCorr(mod_rwasdo_1b))
+
+var_case   <- vc[vc$grp == "case", "vcov"]
+var_target <- vc[vc$grp == "target", "vcov"]
+var_resid  <- attr(VarCorr(mod_rwasdo_1b), "sc")^2
+
+```
+
+```{r}
+# ICCs berechnen
+icc_case   <- var_case / (var_case + var_target + var_resid)
+icc_target <- var_target / (var_case + var_target + var_resid)
+
+icc_case
+icc_target
+
+performance::icc(mod_rwasdo_1b)
+performance::r2(mod_rwasdo_1b)
+
+```
+
+The ICCs remain high even if we introduce fixed effects. The Marginal R^2^ shows that even if we include RWA and SDO as predictors, the much bigger proportion of variance is explained by random effects.
+
+##### Model 3: Random effects for Participants, Targets, RWA subsamples
+Random effects within high vs low RWA / SDO individuals
+  
+```{r creating new subgroups 1b}
+#| include: FALSE
+
+var_decomp_1b <- 
+  var_decomp_1b %>%
+  mutate(rwa_med_split = case_when(rwa > median(rwa,na.rm = T) ~ "high",
+                                   rwa < median(rwa,na.rm = T) ~ "low"),
+         rwa_1sd_split = case_when(rwa > (mean(rwa,na.rm = T) + sd(rwa,na.rm = T)) ~ "+1sd",
+                                   rwa < (mean(rwa,na.rm = T) - sd(rwa,na.rm = T)) ~ "-1sd",
+                                   TRUE ~ NA))
+```
+
+Added 2 new variables that cluster participants (1) along the median split in the high vs. low sample and (2) along the +1 SD in RWA subsample and -1 SD in RWA subsample, respectively. Have a look:
+```{r}
+head(var_decomp_1b)
+```
+
+Now building the new models with specified random effects within the subgroups
+```{r}
+mod_b_1b = lmer(rating ~ 1 + (1|case) + (1|target) + (1|rwa_med_split) + (1|rwa_1sd_split), data = var_decomp_1b)
+summary(mod_b_1b)
+```
+**Calculating the ICCs for each random effect:**
+```{r}
+#| include: FALSE
+vc <- as.data.frame(VarCorr(mod_b_1b))
+
+var_case   <- vc[vc$grp == "case", "vcov"]
+var_target <- vc[vc$grp == "target", "vcov"]
+var_rwa_med_split <- vc[vc$grp == "rwa_med_split", "vcov"]
+var_rwa_1sd_split <- vc[vc$grp == "rwa_1sd_split", "vcov"]
+var_resid  <- attr(VarCorr(mod_b_1b), "sc")^2
+
+```
+
+```{r}
+# ICCs berechnen
+icc_case      <- var_case / (var_case + var_target + var_resid)
+icc_target    <- var_target / (var_case + var_target + var_rwa_med_split + var_rwa_1sd_split + var_resid)
+icc_med_split <- var_rwa_med_split / (var_case + var_target + var_rwa_med_split + var_rwa_1sd_split + var_resid)
+icc_1sd_split <- var_rwa_1sd_split / (var_case + var_target + var_rwa_med_split + var_rwa_1sd_split + var_resid)
+
+icc_case
+icc_target
+icc_med_split
+icc_1sd_split
+
+
+performance::icc(mod_b_1b)
+```
+
+
+# Study 2

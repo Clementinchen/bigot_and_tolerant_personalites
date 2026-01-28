@@ -1,7 +1,5 @@
-rm(list = ls())
+library(tidyverse)
 
-library(dplyr)
-library(ggplot2)
 
 # DATA WRANGLING ----
 
@@ -27,10 +25,16 @@ rename_vars.1b <- setNames(cdbk_1b %>%
 ds2 <- ds2 %>%
   rename_with(~ rename_vars.1b[.],.cols = all_of(names(rename_vars.1b)))
 
+ds2 <- ds2 %>%
+  select(case:mode,
+         starts_with("rwa"),
+         starts_with("sdo"),
+         starts_with("prj"),
+         gender:ncol(.))
 
 ## PREDICTORS ----
 
-prdctrs <- c("rwa","sdo","con","mi","polid")
+prdctrs <- c("rwa","sdo","polid")
 
 ### RWA ----
 
@@ -66,47 +70,11 @@ psych::alpha(ds2[,sdo.itms])
 #score
 ds2$sdo <- rowMeans(ds2[,sdo.itms], na.rm = TRUE)
 
-### CONSERVATISM ----
-
-#recode items
-
-ds2 <- 
-  ds2 %>% 
-  mutate(across(c(cdbk_1b %>%
-                    filter(scale == "Conservatism" & coding == "reversed") %>%
-                    select(variable_label) %>% pull()), ~ 101 - .))
-
-
-#conservatism items
-con.itms <- 
-  ds2 %>% select(starts_with("con_")) %>% names()
-
-#alpha
-psych::alpha(ds2[,con.itms], check.keys = T)
-
-#score
-ds2$con <- rowMeans(ds2[,con.itms],na.rm = TRUE)
-
-### MERITOCRACY ----
-
-#meritocracy items
-mi.itms <- 
-  ds2 %>% select(starts_with("mi_")) %>% names()
-
-fa_mi.1b <- factanal(na.omit(ds2[,mi.itms]), factors = 2, rotation = "varimax")
-fa_mi.1b
-
-#alpha
-psych::alpha(ds2[,mi.itms])
-
-#score
-ds2$mi<-rowMeans(ds2[,mi.itms], na.rm = TRUE)
-
 
 ## DV: TARGETS ----
 
 #recode
-ds2 <- ds2 %>% mutate(across(starts_with("prj_"), ~ 102 - .))
+ds2 <- ds2 %>% mutate(across(starts_with("prj_"), ~ 12 - .))
 
 
 #Targets
@@ -178,43 +146,141 @@ ds2$ta_con <- rowMeans(ds2[ta_con.itms.1b], na.rm = T)
 
 ### BIVARIATE CORRELATIONS ----
 
+
 ds2 %>%
-  select(all_of(prdctrs)) %>%
-  rstatix::cor_mat() %>%
-  rstatix::cor_mark_significant(cutpoints = c(0, 0.001, 0.01, 0.05, 1),
-                                symbols = c("***", "**", "*", ""))
+  select(rwa,sdo,polid) %>%
+  correlation::correlation(., method = "pearson",missing = "keep_pairwise") %>%
+  format() %>%
+  full_join(.,
+            ds2 %>%
+              select(rwa,sdo,polid) %>%
+              correlation::correlation(., method = "pearson",missing = "keep_pairwise") %>%
+              data.frame() %>%
+              select(Parameter1,Parameter2,n_Obs)) %>%
+  mutate(Parameter1 = stringr::str_to_upper(Parameter1),
+         Parameter2 = stringr::str_to_upper(Parameter2)) %>%
+  rename("Variable 1" = "Parameter1","Variable 2" = "Parameter2","N" = "n_Obs") %>%
+  select(1,2,8,3,4,7)
 
-
-biv_r <- matrix(nrow = length(trgt.itms.1b), ncol = 4)
-rownames(biv_r) <- trgt.itms.1b
-colnames(biv_r) <- c("rwa","rwa.p","sdo","sdo.p")
-rwa_sdo <- c("rwa","sdo")
-
-# Loop through each pair of predictor and target variable
-for (tgt in trgt.itms.1b) {
-  for (prd in rwa_sdo) {
-    # Perform correlation test
-    test_result <- cor.test(ds2[[prd]], ds2[[tgt]])
-    # Store the p-value in the results matrix
-    biv_r[tgt, prd] <- round(test_result$estimate,2)
-    biv_r[tgt, paste0(prd,".p")] <- round(test_result$p.value,3)
-    
-  }
-}
-
-biv_r %>%
+ds2 %>%
+  select(rwa,sdo,ta_lib,ta_con) %>%
+  correlation::correlation(., method = "pearson",missing = "keep_pairwise") %>%
   data.frame() %>%
-  tibble::rownames_to_column("target") %>%
-  tibble::as_tibble() %>%
-  arrange(rwa) %>% print(n = 40)
+  filter((Parameter1 == "rwa"|Parameter1 == "sdo") & stringr::str_detect(Parameter2,"ta")) %>%
+  mutate(p = p.adjust(p,"bonferroni"),
+         p = case_when(
+           p < 0.001 ~ "p < .001***",
+           p < 0.01  ~ "p < .01**",
+           p < 0.05  ~ "p < .05*",
+           TRUE      ~ as.character(round(p,3))
+         ),
+         "95% CI" = paste0("[",
+                           format(round(CI_low,2),nsmall = 2),
+                           ", ",
+                           format(round(CI_high,2),nsmall = 2),
+                           "]"),
+         r = format(round(r,2),nsmall = 2),
+         Parameter1 = stringr::str_to_upper(Parameter1),
+         Parameter2 = stringr::str_remove_all(Parameter2,"prj_"),
+         Parameter2 = case_when(Parameter2 == "ta_lib" ~ "Liberal Target",
+                                Parameter2 == "ta_con" ~ "Conservative Target",
+                                T ~ Parameter2)
+  ) %>%
+  rename("Variable 1" = "Parameter1","Variable 2" = "Parameter2","N" = "n_Obs") %>%
+  select('Variable 1','Variable 2', N, r , '95% CI',p) 
+
+
+
+biv_r_rwa <- 
+  ds2 %>%
+  select(rwa,all_of(trgt.itms.1b)) %>%
+  correlation::correlation(., method = "pearson",missing = "keep_pairwise",p_adjust = "none") %>%
+  as.data.frame() %>%
+  filter(Parameter1 == "rwa") %>%
+  mutate(p = p.adjust(p,"bonferroni"),
+         p = case_when(
+           p < 0.001 ~ "p < .001***",
+           p < 0.01  ~ "p < .01**",
+           p < 0.05  ~ "p < .05*",
+           TRUE      ~ as.character(round(p,3))
+         ),
+         "95% CI" = paste0("[",
+                           format(round(CI_low,2),nsmall = 2),
+                           ", ",
+                           format(round(CI_high,2),nsmall = 2),
+                           "]"),
+         r = format(round(r,2),nsmall = 2),
+         Parameter1 = stringr::str_to_upper(Parameter1),
+         Parameter2 = stringr::str_remove_all(Parameter2,"prj_"),
+         Parameter2 = stringr::str_replace_all(Parameter2,"_"," "),
+         Parameter2 = stringr::str_to_title(Parameter2)
+  ) %>%
+  rename("Variable 1" = "Parameter1","Variable 2" = "Parameter2","N" = "n_Obs") %>%
+  select('Variable 1','Variable 2', N, r , '95% CI',p)
+
+biv_r_rwa
+
+
+biv_r_sdo <- 
+  ds2 %>%
+  select(sdo,all_of(trgt.itms.1b)) %>%
+  correlation::correlation(., method = "pearson",missing = "keep_pairwise",p_adjust = "none") %>%
+  as.data.frame() %>%
+  filter(Parameter1 == "sdo") %>%
+  mutate(p = p.adjust(p,"bonferroni"),
+         p = case_when(
+           p < 0.001 ~ "p < .001***",
+           p < 0.01  ~ "p < .01**",
+           p < 0.05  ~ "p < .05*",
+           TRUE      ~ as.character(round(p,3))
+         ),
+         "95% CI" = paste0("[",
+                           format(round(CI_low,2),nsmall = 2),
+                           ", ",
+                           format(round(CI_high,2),nsmall = 2),
+                           "]"),
+         r = format(round(r,2),nsmall = 2),
+         Parameter1 = stringr::str_to_upper(Parameter1),
+         Parameter2 = stringr::str_remove_all(Parameter2,"prj_"),
+         Parameter2 = stringr::str_replace_all(Parameter2,"_"," "),
+         Parameter2 = stringr::str_to_title(Parameter2)
+  ) %>%
+  rename("Variable 1" = "Parameter1","Variable 2" = "Parameter2","N" = "n_Obs") %>%
+  select('Variable 1','Variable 2', N, r , '95% CI',p)
+
+biv_r_sdo
+
 
 ### Correlations Target Factors
 
 ds2 %>%
-  select(all_of(rwa_sdo),ta_lib,ta_con) %>%
-  rstatix::cor_mat() %>%
-  rstatix::cor_mark_significant(cutpoints = c(0, 0.001, 0.01, 0.05, 1),
-                                symbols = c("***", "**", "*", ""))
+  select(rwa,sdo,ta_lib,ta_con) %>%
+  correlation::correlation(., method = "pearson",missing = "keep_pairwise",p_adjust = "none") %>%
+  as.data.frame() %>%
+  mutate(p = p.adjust(p,"bonferroni"),
+         p = case_when(
+           p < 0.001 ~ "p < .001***",
+           p < 0.01  ~ "p < .01**",
+           p < 0.05  ~ "p < .05*",
+           TRUE      ~ as.character(round(p,3))
+         ),
+         "95% CI" = paste0("[",
+                           format(round(CI_low,2),nsmall = 2),
+                           ", ",
+                           format(round(CI_high,2),nsmall = 2),
+                           "]"),
+         r = format(round(r,2),nsmall = 2),
+         Parameter1 = stringr::str_to_upper(Parameter1),
+         Parameter2 = stringr::str_to_upper(Parameter2),
+         Parameter1 = case_when(Parameter1 == "TA_LIB" ~ "Liberal Targets",
+                                T ~ Parameter1),
+         Parameter2 = case_when(Parameter2 == "TA_LIB" ~ "Liberal Targets",
+                                Parameter2 == "TA_CON" ~ "Conservative Targets",
+                                T ~ Parameter2)
+         
+  ) %>%
+  rename("Variable 1" = "Parameter1","Variable 2" = "Parameter2","N" = "n_Obs") %>%
+  select('Variable 1','Variable 2', N, r , '95% CI',p)
 
 ### PARTIAL CORRELATIONS -----
 
@@ -236,6 +302,15 @@ rbind(
   select(target_scale,rwa,sdo,partial) %>%
   tidyr::pivot_wider(names_from = "partial", values_from = c("rwa","sdo"))
 
+ds2 %>%
+  select(rwa,sdo,polid,ta_lib,ta_con) %>%
+  correlation::correlation(partial = F) %>%
+  data.frame()
+
+ds2 %>%
+  select(rwa,polid,ta_lib) %>%
+  correlation::correlation(partial = F) %>%
+  data.frame()
 
 ## IDEOLOGICAL CONFLICT ----
 
@@ -258,6 +333,8 @@ ds2 %>%
     ~ broom::tidy(lm(rating ~ predictor_scl*trgt_fct, data = .))
   )
 
+
+
 ## Plot
 
 ds2 %>%
@@ -279,7 +356,7 @@ ds2 %>%
 ### Centered Targets ----
 
 
-prj_cent.1b <- 
+prej_cent.1b <- 
   ds2 %>%
   select(case,rwa,sdo,starts_with("prj_")) %>%
   tidyr::pivot_longer(cols = starts_with("prj_"),
@@ -307,8 +384,8 @@ prj_cent.1b <-
   )
 
 
-prj_cent.1b <- 
-  prj_cent.1b %>%
+prej_cent.1b <- 
+  prej_cent.1b %>%
   tidyr::pivot_longer(cols = c(rwa,sdo),
                       names_to = "scale",
                       values_to = "score") %>%
@@ -321,9 +398,9 @@ prj_cent.1b <-
             gmc = mean(rating_gmc,na.rm = T),
             scl = mean(rating_scl,na.rm = T)) %>%
   tidyr::pivot_longer(cols = c(raw,gmc,scl),
-                      names_to = "prj_cent.1ber",
+                      names_to = "prej_cent.1ber",
                       values_to = "prj_rating") %>%
-  tidyr::pivot_wider(names_from = c("hilo","prj_cent.1ber"),
+  tidyr::pivot_wider(names_from = c("hilo","prej_cent.1ber"),
                      values_from = prj_rating) %>%
   group_by(scale) %>%
   mutate(diff_raw = abs(high_raw-low_raw),
@@ -334,15 +411,31 @@ prj_cent.1b <-
          low_gmc,high_gmc,diff_gmc,
          low_scl,high_scl,diff_scl)
 
-list(data = prj_cent.1b,
-     means = prj_cent.1b %>%
+list(data = prej_cent.1b,
+     means = prej_cent.1b %>%
        summarise_if(is.numeric,mean, na.rm = TRUE),
-     sd = prj_cent.1b %>%
+     sd = prej_cent.1b %>%
        summarise_if(is.numeric,sd, na.rm = TRUE),
-     corr = prj_cent.1b %>% summarise(r_raw = cor(low_raw,high_raw),
-                                   r_gmc = cor(low_gmc,high_gmc),
-                                   r_scl = cor(low_scl,high_scl))
+     corr = prej_cent.1b %>% summarise(r_raw = cor(low_raw,high_raw),
+                                       r_gmc = cor(low_gmc,high_gmc),
+                                       r_scl = cor(low_scl,high_scl))
 )
+
+
+prej_cent.1b %>% 
+  select(!ends_with("_diff")) %>% 
+  correlation::correlation() %>%
+  data.frame() %>%
+  filter(
+    (Group == "rwa" & Parameter1 == "low_raw" & Parameter2 == "high_raw") |
+      (Group == "rwa" & Parameter1 == "low_gmc" & Parameter2 == "high_gmc") |
+      (Group == "rwa" & Parameter1 == "low_scl" & Parameter2 == "high_scl") |
+      (Group == "sdo" & Parameter1 == "low_raw" & Parameter2 == "high_raw") |
+      (Group == "sdo" & Parameter1 == "low_gmc" & Parameter2 == "high_gmc") |
+      (Group == "sdo" & Parameter1 == "low_scl" & Parameter2 == "high_scl")
+  ) %>%
+  mutate(p = p.adjust(p, method = "bonferroni"))
+
 
 ## SHARED PREJUDICE ----
 
@@ -376,7 +469,41 @@ list(data = split.1b,
      corr = split.1b %>% select(!ends_with("_diff")) %>% corrr::correlate())
 
 
+split.1b %>% 
+  select(!ends_with("_diff")) %>% 
+  correlation::correlation() %>%
+  data.frame() %>%
+  filter(
+    (Parameter1 == "rwa_high" & Parameter2 == "rwa_low") |
+      (Parameter1 == "sdo_high" & Parameter2 == "sdo_low")
+  ) %>%
+  mutate(p = p.adjust(p, method = "bonferroni"))
 
+### VARIANCE DECOMPOSITION ----
+
+mlm_1b <- 
+  ds2 %>%
+  select(case,rwa,sdo,starts_with("prj")) %>%
+  tidyr::pivot_longer(cols = starts_with("prj"),
+                      names_to = "target",
+                      values_to = "rating")
+
+mlm_rwa_1b <- lme4::lmer(rating ~ rwa + (rwa|target), data = mlm_1b)
+summary(mlm_rwa_1b)
+
+mlm_sdo_1b <- lme4::lmer(rating ~ sdo + (sdo|target), data = mlm_1b)
+summary(mlm_sdo_1b)
+
+sjPlot::tab_model(mlm_rwa_1b, show.std = T,show.est = F)
+sjPlot::tab_model(mlm_sdo_1b, show.std = T,show.est = F)
+
+sjPlot::tab_model(mlm_rwa_1b,mlm_sdo_1b,show.std = T,show.est = F,
+                  file = "variance_decomp_mlm_study1a.html")
+
+r2mlm::r2mlm(mlm_rwa_1b)$R2s %>%
+  round(.,4)
+r2mlm::r2mlm(mlm_sdo_1b)$R2s %>%
+  round(.,4)
 
 # DESCRIPTIVES ----
 
@@ -432,4 +559,3 @@ ds2 %>%
       select(-valid_percent) %>%
       data.frame()
   )
-
