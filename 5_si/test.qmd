@@ -1,0 +1,35 @@
+---
+format: docx
+---
+
+hallo
+
+```{r}
+#| include: FALSE
+
+library(tidyverse)
+library(kableExtra)
+
+cdbk_1b <- openxlsx::read.xlsx("C:/Users/Clemens Lindner/Documents/github/bigot_and_tolerant_personalites/0_data/three_challenges_codebook.xlsx", sheet = 2) %>%
+  mutate(variable = tolower(variable))
+```
+
+## Measures
+
+```{r}
+#| label: tbl-rwa_itms
+#| tbl-cap: "RWA items"
+#| echo: false
+#| output: true
+
+cdbk_1b %>%
+  filter(scale == "RWA") %>%
+  select(english_item_translation,german_item_original, subscale) %>%
+  mutate(subscale = str_replace_all(subscale,"_"," "),
+         subscale = str_to_title(subscale)) %>%
+  rename("Orginal Item" = "german_item_original",
+         "English Translation" = "english_item_translation",
+         "Subscale" = "subscale") %>%
+  kable(align = "lll") 
+
+```

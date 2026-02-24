@@ -1,0 +1,67 @@
+---
+title: "Supplementary Materials"
+format: pdf
+editor: visual
+---
+
+## Quarto
+
+Quarto enables you to weave together content and executable code into a finished document. To learn more about Quarto see <https://quarto.org>.
+
+## Running Code
+
+When you click the **Render** button a document will be generated that includes both content and the output of embedded code. You can embed code like this:
+
+```{r}
+1 + 1
+```
+
+You can add options to executable code like this
+
+```{r}
+#| echo: false
+2 * 2
+```
+
+The `echo: false` option disables the printing of code (only output is displayed).
+
+```{r}
+#| include: FALSE
+library(tidyverse)
+library(kableExtra)
+
+cdbk_1b <- openxlsx::read.xlsx("C:/Users/Clemens Lindner/Documents/github/bigot_and_tolerant_personalites/0_data/three_challenges_codebook.xlsx", sheet = 2) %>%
+  mutate(variable = tolower(variable))
+```
+
+```{r}
+#| echo: FALSE
+#| output: TRUE
+#| width: 100
+
+cdbk_1b %>%
+  filter(scale == "RWA") %>%
+  select(german_item_original,english_item_translation, subscale) %>%
+  mutate(subscale = str_to_title(str_replace_all(subscale,"_"," "))) %>%
+  rename("Orginal Item" = "german_item_original",
+         "English translation" = "english_item_translation",
+         "Subscale" = "subscale") %>%
+  kbl()
+
+```
+
+```{r}
+#| echo: FALSE
+#| output: TRUE
+
+cdbk_1b %>%
+  filter(scale == "SDO") %>%
+  select(german_item_original,english_item_translation, coding) %>%
+  mutate(coding = case_when(is.na(coding) ~ "pro-trait",
+                            TRUE ~ "con-trait")) %>%
+  rename("Orginal Item" = "german_item_original",
+         "English translation" = "english_item_translation",
+         "Coding" = "coding") %>%
+  kbl()
+
+```

@@ -1,0 +1,67 @@
+---
+title: "When the Collective Outweighs the Individual: The Collective Nature of Prejudice"
+subtitle: "Appendix"
+author: "Clemens Lindner"
+format: html
+editor: visual
+---
+
+# Studies 1a & 1b
+
+```{r}
+#| include: FALSE
+
+library(tidyverse)
+library(flextable)
+library(officer)
+
+cdbk_1b <- openxlsx::read.xlsx("C:/Users/Clemens Lindner/Documents/github/bigot_and_tolerant_personalites/0_data/three_challenges_codebook.xlsx", sheet = 2) %>%
+  mutate(variable = tolower(variable))
+
+```
+
+## Measures
+
+{{< pagebreak >}}
+
+```{r}
+#| echo: false
+#| label: tbl-rwa.itms
+#| tbl-cap: "RWA Items"
+
+cdbk_1b %>%
+  filter(scale == "RWA") %>%
+  select(english_item_translation,german_item_original, subscale) %>%
+  mutate(subscale = str_replace_all(subscale,"_"," "),
+         subscale = str_to_title(subscale)) %>%
+  rename("Orginal Item" = "german_item_original",
+         "English Translation" = "english_item_translation",
+         "Subscale" = "subscale") %>%
+  flextable() %>%
+  set_table_properties(width = 1,layout = "autofit") 
+
+```
+
+Hello this is text
+
+```{r}
+#| echo: false
+#| label: tbl-sdo.itms
+#| tbl-cap: "SDO Items"
+
+cdbk_1b %>%
+  filter(scale == "SDO") %>%
+  select(english_item_translation,german_item_original, coding) %>%
+  mutate(coding = case_when(is.na(coding) ~ "pro-trait",
+                            TRUE ~ "con-trait")) %>%
+  rename("Orginal Item" = "german_item_original",
+         "English Translation" = "english_item_translation",
+         "Coding" = "coding") %>%
+  flextable() %>%
+  set_table_properties(width = 1,layout = "autofit")
+
+```
+
+# Study 2
+
+# Study 3

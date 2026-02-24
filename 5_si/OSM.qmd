@@ -3,6 +3,7 @@ title: "Supplementary Materials"
 format:
   html:
     theme: default
+    self-contained: true
 ---
 
 ```{r}
