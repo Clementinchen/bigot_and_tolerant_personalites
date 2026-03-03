@@ -1,164 +1,33 @@
-library(tidyverse)
+# DEFINE FUNCTIONS ----
 
-
-# DATA WRANGLING ----
-
-## get data----
-ds1 <- read.csv('https://osf.io/ywpq4/download', 
-                header = TRUE, sep = ",", as.is = T, na.strings = c("-9",NA)) %>%
-  janitor::clean_names(.)
-
-ds1 <- read.csv(file = './0_data/rwa_sdo_revisited_study_1a.csv', 
-                header = TRUE, sep = ",", as.is = T, na.strings = c("-1","-9",NA))  %>%
-  janitor::clean_names(.)
-
-
-#get codebook
-cdbk_1a <- openxlsx::read.xlsx("./0_data/three_challenges_codebook.xlsx", sheet = 1) %>%
-  mutate(variable = tolower(variable))
-
-
-rename_vars.1a <- setNames(cdbk_1a %>%
-                             pull(variable_label),
-                           cdbk_1a %>%
-                             pull(variable))
-
-ds1 <- ds1 %>%
-  rename_with(~ rename_vars.1a[.],.cols = all_of(names(rename_vars.1a)))
-
-ds1 <- ds1 %>%
-  select(case:mode,
-         starts_with("rwa"),
-         starts_with("sdo"),
-         starts_with("prj"),
-         age:ncol(.))
-
-ds1 <- 
-  ds1 %>%
-  mutate(
-    gender = factor(gender),
-    gender = forcats::fct_recode(gender,
-                                 "female" = "2",
-                                 "male"   = "1",
-                                 "divers" = "3"),
-    gender = case_when(gender == "4" ~ NA, TRUE ~ gender),
-    education = factor(education,  levels = c("1","2","3","4","5","6","7")),
-    education = forcats::fct_recode(education,
-                                    "isced_1" = "1",
-                                    "isced_2" = "2",
-                                    "isced_2" = "3",
-                                    "isced_3" = "4",
-                                    "isced_4" = "5",
-                                    "isced_6" = "6",
-                                    "isced_6" = "7")
-    )
-
-## PREDICTORS ----
-
-prdctrs <- c("rwa","sdo","polid")
-
-### RWA ----
-
-#RWA items
-rwa.itms <- 
-  ds1 %>% select(starts_with("rwa_")) %>% names()
-
-#factor analysis
-fa_rwa.1a <- factanal(na.omit(ds1[,rwa.itms]), factors = 1, rotation = "varimax")
-fa_rwa.1a
-
-
-#alpha
-psych::alpha(ds1[,rwa.itms])
-
-#score
-ds1$rwa <- rowMeans(ds1[,rwa.itms], na.rm = TRUE)
-
-
-### SDO ----
-
-#sdo items
-sdo.itms <- 
-  ds1 %>% select(starts_with("sdo_")) %>% names()
-
-#factor analysis
-fa_sdo.1a <- factanal(na.omit(ds1[,sdo.itms]), factors = 2, rotation = "varimax")
-fa_sdo.1a
-
-#alpha
-psych::alpha(ds1[,sdo.itms])
-
-#score
-ds1$sdo <- rowMeans(ds1[,sdo.itms], na.rm = TRUE)
-
-
-## DV: TARGETS ----
-
-#recode
-ds1 <- ds1 %>% mutate(across(starts_with("prj_"), ~ 12 - .))
-
-
-#Targets
-trgt.itms.1a <- 
-  ds1 %>%
-  select(starts_with("prj_")) %>%
-  names()
-
-### FACTOR ANALYSIS -----
-
-psych::fa.parallel(ds1 %>% select(starts_with("prj_")))
-
-fa_trgts.1a <- 
-  psych::fa(ds1 %>%
-              select(starts_with("prj_")), 
-            nfactors = 2, 
-            rotate = "oblimin", 
-            fm = "ml")
-
-fa_trgts.1a <- 
-  loadings(fa_trgts.1a)[] %>%
-  data.frame() %>%
-  mutate(ML2     = case_when(ML2 > ML1 ~ ML2),
-         ML1     = case_when(is.na(ML2) ~ ML1),
-         trgt_factor = as.factor(case_when(is.na(ML2) ~ "liberal",
-                                           TRUE ~ "conservative")))
-
-sjPlot::tab_fa(ds1 %>%
-                  select(starts_with("prj_")), 
-                nmbr.fctr = 2, 
-                rotation = "oblimin",
-               method = "ml",
-               file = "./2_tables/fa_study_1a.html")
-
-### AGGREGATE ----
-
-#LIBERAL TARGETS
-
-#item index
-ta_lib.itms.1a <- 
-  fa_trgts.1a %>%
-  filter(trgt_factor == "liberal") %>%
-  row.names()
-
-#alpha
-psych::alpha(ds1[ta_lib.itms.1a])
-
-#mean
-ds1$ta_lib  <- rowMeans(ds1[ta_lib.itms.1a], na.rm = T)
-
-#CONSERVATIVE TARGETS
-
-#item index
-ta_con.itms.1a <-
-  fa_trgts.1a %>%
-  filter(trgt_factor == "conservative") %>%
-  row.names()
-
-#alpha
-psych::alpha(ds1[,ta_con.itms.1a])
-
-#mean
-ds1$ta_con <- rowMeans(ds1[ta_con.itms.1a], na.rm = T)
+biv_r <- 
+  function(data,vars1,vars2,method,missing, ci,p_adjust) {
+    res <- data %>% correlation::correlation(select = vars1,
+                                      select2 = vars2,
+                                      method = method,
+                                      missing = missing,
+                                      ci = ci,
+                                      p_adjust = p_adjust)
+    res <- as_tibble(res) %>%
+      mutate(Var1 = Parameter1,
+             Var2 = Parameter2,
+             N = n_Obs,
+             r = r,
+             CI = paste0("[",
+                         format(round(CI_low,2),nsmall = 2),
+                         ", ",
+                         format(round(CI_high,2),nsmall = 2),
+                         "]"),
+             p_scientific = p,
+             p_star = case_when(
+               p < .001 ~ "p < .001",
+               p < .01  ~ "p < .01",
+               p < .05 ~ "p < .05",
+               TRUE ~ "n.s."),
+             .keep = "none"
+             )
+    res %>% select(Var1,Var2,N,r,CI,p_scientific,p_star) %>% rename_with(.,~paste0("CI"," (",gsub("^0+([\\.])","",ci),"%",")"),"CI") %>% print(n = nrow(.))
+  }
 
 
 # ANALYSES ----
@@ -167,244 +36,102 @@ ds1$ta_con <- rowMeans(ds1[ta_con.itms.1a], na.rm = T)
 
 ### BIVARIATE CORRELATIONS ----
 
+#predictors
+biv_r(data = ds1, vars1 = prdctrs,vars2 = NULL ,method  = "pearson",missing = "keep_pairwise",ci = .95, p_adjust = "none")
 
-ds1 %>%
-  select(rwa,sdo,polid) %>%
-  correlation::correlation(., method = "pearson",missing = "keep_pairwise") %>%
-  format() %>%
-  full_join(.,
-            ds1 %>%
-              select(rwa,sdo,polid) %>%
-              correlation::correlation(., method = "pearson",missing = "keep_pairwise") %>%
-              data.frame() %>%
-              select(Parameter1,Parameter2,n_Obs)) %>%
-  mutate(Parameter1 = stringr::str_to_upper(Parameter1),
-         Parameter2 = stringr::str_to_upper(Parameter2)) %>%
-  rename("Variable 1" = "Parameter1","Variable 2" = "Parameter2","N" = "n_Obs") %>%
-  select(1,2,8,3,4,7)
+#rwa - targets
+biv_r(data = ds1, vars1 = "rwa", vars2 = prj.trgts.1a, method  = "pearson",missing = "keep_pairwise",ci = .95, p_adjust = "holm")
 
-ds1 %>%
-  select(rwa,sdo,ta_lib,ta_con) %>%
-  correlation::correlation(., method = "pearson",missing = "keep_pairwise") %>%
-  data.frame() %>%
-  filter((Parameter1 == "rwa"|Parameter1 == "sdo") & stringr::str_detect(Parameter2,"ta")) %>%
-  mutate(p = p.adjust(p,"bonferroni"),
-         p = case_when(
-           p < 0.001 ~ "p < .001***",
-           p < 0.01  ~ "p < .01**",
-           p < 0.05  ~ "p < .05*",
-           TRUE      ~ as.character(round(p,3))
-         ),
-         "95% CI" = paste0("[",
-                           format(round(CI_low,2),nsmall = 2),
-                           ", ",
-                           format(round(CI_high,2),nsmall = 2),
-                           "]"),
-         r = format(round(r,2),nsmall = 2),
-         Parameter1 = stringr::str_to_upper(Parameter1),
-         Parameter2 = stringr::str_remove_all(Parameter2,"prj_"),
-         Parameter2 = case_when(Parameter2 == "ta_lib" ~ "Liberal Target",
-                                Parameter2 == "ta_con" ~ "Conservative Target",
-                                T ~ Parameter2)
-  ) %>%
-  rename("Variable 1" = "Parameter1","Variable 2" = "Parameter2","N" = "n_Obs") %>%
-  select('Variable 1','Variable 2', N, r , '95% CI',p) 
-  
-
-
-biv_r_rwa <- 
-  ds1 %>%
-  select(rwa,all_of(trgt.itms.1a)) %>%
-  correlation::correlation(., method = "pearson",missing = "keep_pairwise",p_adjust = "none") %>%
-  as.data.frame() %>%
-  filter(Parameter1 == "rwa") %>%
-  mutate(p = p.adjust(p,"bonferroni"),
-         p = case_when(
-           p < 0.001 ~ "p < .001***",
-           p < 0.01  ~ "p < .01**",
-           p < 0.05  ~ "p < .05*",
-           TRUE      ~ as.character(round(p,3))
-                                    ),
-         "95% CI" = paste0("[",
-                           format(round(CI_low,2),nsmall = 2),
-                           ", ",
-                           format(round(CI_high,2),nsmall = 2),
-                           "]"),
-         r = format(round(r,2),nsmall = 2),
-         Parameter1 = stringr::str_to_upper(Parameter1),
-         Parameter2 = stringr::str_remove_all(Parameter2,"prj_"),
-         Parameter2 = stringr::str_replace_all(Parameter2,"_"," "),
-         Parameter2 = stringr::str_to_title(Parameter2)
-           ) %>%
-  rename("Variable 1" = "Parameter1","Variable 2" = "Parameter2","N" = "n_Obs") %>%
-  select('Variable 1','Variable 2', N, r , '95% CI',p)
-
-biv_r_rwa
-
-
-biv_r_sdo <- 
-  ds1 %>%
-  select(sdo,all_of(trgt.itms.1a)) %>%
-  correlation::correlation(., method = "pearson",missing = "keep_pairwise",p_adjust = "none") %>%
-  as.data.frame() %>%
-  filter(Parameter1 == "sdo") %>%
-  mutate(p = p.adjust(p,"bonferroni"),
-         p = case_when(
-           p < 0.001 ~ "p < .001***",
-           p < 0.01  ~ "p < .01**",
-           p < 0.05  ~ "p < .05*",
-           TRUE      ~ as.character(round(p,3))
-         ),
-         "95% CI" = paste0("[",
-                           format(round(CI_low,2),nsmall = 2),
-                           ", ",
-                           format(round(CI_high,2),nsmall = 2),
-                           "]"),
-         r = format(round(r,2),nsmall = 2),
-         Parameter1 = stringr::str_to_upper(Parameter1),
-         Parameter2 = stringr::str_remove_all(Parameter2,"prj_"),
-         Parameter2 = stringr::str_replace_all(Parameter2,"_"," "),
-         Parameter2 = stringr::str_to_title(Parameter2)
-  ) %>%
-  rename("Variable 1" = "Parameter1","Variable 2" = "Parameter2","N" = "n_Obs") %>%
-  select('Variable 1','Variable 2', N, r , '95% CI',p)
-
-biv_r_sdo
-
+#sdo - targets
+biv_r(data = ds1, vars1 = "sdo", vars2 = prj.trgts.1a, method  = "pearson",missing = "keep_pairwise",ci = .95, p_adjust = "holm")
 
 ### Correlations Target Factors
+#rwa - targets
+biv_r(data = ds1, vars1 = c("rwa","sdo"), vars2 = c("prj_liberal","prj_conservative"), method  = "pearson",missing = "keep_pairwise",ci = .95, p_adjust = "holm")
 
-ds1 %>%
-  select(rwa,sdo,ta_lib,ta_con) %>%
-  correlation::correlation(., method = "pearson",missing = "keep_pairwise",p_adjust = "none") %>%
-  as.data.frame() %>%
-  mutate(p = p.adjust(p,"bonferroni"),
-         p = case_when(
-           p < 0.001 ~ "p < .001***",
-           p < 0.01  ~ "p < .01**",
-           p < 0.05  ~ "p < .05*",
-           TRUE      ~ as.character(round(p,3))
-         ),
-         "95% CI" = paste0("[",
-                           format(round(CI_low,2),nsmall = 2),
-                           ", ",
-                           format(round(CI_high,2),nsmall = 2),
-                           "]"),
-         r = format(round(r,2),nsmall = 2),
-         Parameter1 = stringr::str_to_upper(Parameter1),
-         Parameter2 = stringr::str_to_upper(Parameter2),
-         Parameter1 = case_when(Parameter1 == "TA_LIB" ~ "Liberal Targets",
-                                T ~ Parameter1),
-         Parameter2 = case_when(Parameter2 == "TA_LIB" ~ "Liberal Targets",
-                                Parameter2 == "TA_CON" ~ "Conservative Targets",
-                                T ~ Parameter2)
-         
-  ) %>%
-  rename("Variable 1" = "Parameter1","Variable 2" = "Parameter2","N" = "n_Obs") %>%
-  select('Variable 1','Variable 2', N, r , '95% CI',p)
 
 ### PARTIAL CORRELATIONS -----
-
-rbind(
-  ds1 %>%
-    select(rwa,sdo,ta_con,ta_lib) %>% 
-    cor(use = "pairwise") %>% 
-    data.frame() %>%
-    tibble::rownames_to_column("target_scale") %>%
-    mutate(partial = "Bivariate"),
-  ds1 %>%
-    select(rwa,sdo,ta_con,ta_lib,polid) %>% 
-    psych::partial.r(.,1:4,5) %>% 
-    data.frame() %>%
-    tibble::rownames_to_column("target_scale") %>%
-    mutate(partial = "pol_slf_plcmnt")
+partial <- expand_grid(
+  var1    = c("rwa", "sdo"),
+  var2    = c("prj_liberal", "prj_conservative"),
+  partial = c(FALSE, TRUE)
 ) %>%
-  filter(target_scale == "ta_lib"|target_scale == "ta_con") %>%
-  select(target_scale,rwa,sdo,partial) %>%
-  tidyr::pivot_wider(names_from = "partial", values_from = c("rwa","sdo"))
+  pmap_dfr(function(var1, var2, partial) {
+    
+    select_vars <- if (partial) c(var1, "polid") else var1
+    
+    correlation::correlation(
+      ds1,
+      select  = select_vars,
+      select2 = var2,
+      partial = partial,
+      p_adjust = "none"
+    ) %>%
+      as_tibble() %>%
+      { if (partial) slice(., 1) else . } %>%
+      mutate(
+        correlation_type = if_else(
+          partial,
+          "partial_polid",
+          "bivariate"
+        )
+      )
+  })
 
-ds1 %>%
-  select(rwa,sdo,polid,ta_lib,ta_con) %>%
-  correlation::correlation(partial = F) %>%
-  data.frame()
-
-ds1 %>%
-  select(rwa,polid,ta_lib) %>%
-  correlation::correlation(partial = F) %>%
-  data.frame()
+partial[,c(1,2,12,11,3:6,9)]
 
 ## IDEOLOGICAL CONFLICT ----
 
 ### Left-right interaction ----
 
-ds1 %>%
-  select(case,rwa,sdo,all_of(trgt.itms.1a)) %>%
-  tidyr::pivot_longer(cols = c(rwa,sdo),
-                      names_to  = "predictor",
-                      values_to = "score") %>%
-  tidyr::pivot_longer(cols = all_of(trgt.itms.1a),
-                      names_to  = "target",
-                      values_to = "rating") %>%
-  mutate(trgt_fct = case_when(target %in% ta_con.itms.1a ~ "right",
-                              target %in% ta_lib.itms.1a ~ "left")) %>%
-  group_by(predictor) %>%
-  mutate(predictor_scl = as.numeric(scale(score))) %>%
-  group_modify(
-    # Use `tidy`, `glance` or `augment` to extract different information from the fitted models.
-    ~ broom::tidy(lm(rating ~ predictor_scl*trgt_fct, data = .))
-  )
+#rwa
+lm_rwa.1a_no_cntrls <- lm(prj_rating ~ rwa_scl*trgt_fct, data = ds1_ana) #no controls
+lm_rwa.1a_cntrls    <- lm(prj_rating ~ rwa_scl*trgt_fct + age + gender + education + polid, data = ds1_ana) #controlling for age, gender, education, political self placement
 
+summary(lm_rwa.1a_no_cntrls)
+summary(lm_rwa.1a_cntrls)
 
+interactions::sim_slopes(lm_rwa.1a_no_cntrls, pred = rwa_scl, modx = trgt_fct)
+interactions::sim_slopes(lm_rwa.1a_cntrls, pred = rwa_scl, modx = trgt_fct)
+
+interactions::interact_plot(lm_rwa.1a_no_cntrls, pred = rwa_scl, modx = trgt_fct,interval = T)  
+interactions::interact_plot(lm_rwa.1a_cntrls, pred = rwa_scl, modx = trgt_fct,interval = T)  
+
+#sdo
+lm_sdo.1a_no_cntrls <- lm(prj_rating ~ sdo_scl*trgt_fct, data = ds1_ana) #no controls
+lm_sdo.1a_cntrls    <- lm(prj_rating ~ sdo_scl*trgt_fct + age + gender + education + polid, data = ds1_ana) #controlling for age, gender, education, political self placement
+
+summary(lm_sdo.1a_no_cntrls)
+summary(lm_sdo.1a_cntrls)
+
+interactions::sim_slopes(lm_sdo.1a_no_cntrls, pred = sdo_scl, modx = trgt_fct)
+interactions::sim_slopes(lm_sdo.1a_cntrls, pred = sdo_scl, modx = trgt_fct)
+
+interactions::interact_plot(lm_sdo.1a_no_cntrls, pred = sdo_scl, modx = trgt_fct,interval = T)  
+interactions::interact_plot(lm_sdo.1a_cntrls, pred = sdo_scl, modx = trgt_fct,interval = T)  
 
 ## Plot
 
-ds1 %>%
-  select(case,rwa,sdo,all_of(trgt.itms.1a)) %>%
-  tidyr::pivot_longer(cols = c(rwa,sdo),
-                      names_to  = "predictor",
-                      values_to = "score") %>%
-  tidyr::pivot_longer(cols = all_of(trgt.itms.1a),
-                      names_to  = "target",
-                      values_to = "rating") %>%
-  mutate(trgt_fct = case_when(target %in% ta_con.itms.1a ~ "right",
-                              target %in% ta_lib.itms.1a ~ "left")) %>%
-  group_by(predictor) %>%
-  mutate(predictor_scl = as.numeric(scale(score))) %>%
-  ggplot(aes(y = rating, x = predictor_scl,color = trgt_fct)) +
+ds1_ana %>%
+  pivot_longer(cols = c(rwa_scl,sdo_scl), names_to = "predictor", values_to = "score_scl") %>%
+  ggplot(aes(y = prj_rating, x = score_scl,color = trgt_fct)) +
   geom_smooth(se = T, method = lm) +
-  facet_wrap(~predictor)
+  facet_wrap(~predictor) +
+  theme_minimal()
 
-### Centered Targets ----
 
+## HIGHLIGHTING TARGET VARIANCE ----
+ds1_ana %>%
+  pivot_longer(cols = c(rwa,sdo), names_to = "scale",values_to = "score") %>%
+  pivot_longer(cols = c(prj_rating,prj_rating_scl,prj_rating_gmc), names_to = "trgt_centering",values_to = "prj_rating") %>%
+  mutate(trgt_centering = factor(case_when(trgt_centering == "prj_rating" ~ "prj_rating_raw", TRUE ~ trgt_centering))) %>%
+  group_by(scale) %>%
+  mutate(scale_hilo = case_when(score > median(score,na.rm = T) ~ "high", TRUE ~ "low")) %>%
+  group_by(scale,scale_hilo,prj_target,trgt_centering) %>%
+  summarise(mean = mean(prj_rating,na.rm = T)) %>%
+  pivot_wider(names_from = "scale_hilo", values_from = "mean") %>%
+  mutate(diff = abs(high-low))
 
-prej_cent.1a <- 
-  ds1 %>%
-  select(case,rwa,sdo,starts_with("prj_")) %>%
-  tidyr::pivot_longer(cols = starts_with("prj_"),
-                      names_to = "target",
-                      values_to = "rating") %>%
-  full_join(.,
-            ds1 %>%
-              select(case,starts_with("prj_")) %>%
-              mutate(across(starts_with("prj_"), 
-                            ~ as.numeric(scale(.)))) %>%
-              tidyr::pivot_longer(cols = -case,
-                                  names_to = "target",
-                                  values_to = "rating_scl"),
-            by = c("case","target")
-  ) %>%
-  full_join(.,
-            ds1 %>%
-              select(case,starts_with("prj_")) %>%
-              mutate(across(all_of(trgt.itms.1a), 
-                            ~ . - mean(.,na.rm = T))) %>%
-              tidyr::pivot_longer(cols = -case,
-                                  names_to = "target",
-                                  values_to = "rating_gmc"),
-            by = c("case","target")
-  )
-
-         
 prej_cent.1a <- 
 prej_cent.1a %>%
   tidyr::pivot_longer(cols = c(rwa,sdo),
@@ -529,7 +256,7 @@ r2mlm::r2mlm(mlm_sdo_1a)$R2s %>%
 # DESCRIPTIVES ----
 
 ds1 %>%
-  select(all_of(prdctrs),starts_with("prj"),ta_lib,ta_con) %>%
+  select(all_of(prdctrs),starts_with("prj"),prj_liberal,prj_conservative) %>%
   tidyr::pivot_longer(cols = 1:ncol(.),names_to = "variable") %>%
   #group_by(variable) %>%
   reframe(Mean = mean(value, na.rm = T),

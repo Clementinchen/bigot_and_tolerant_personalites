@@ -3,6 +3,7 @@ title: "When the Collective Outweighs the Individual: The Collective Nature of P
 subtitle: "Appendix"
 author: "Clemens Lindner"
 format: html
+self-contained: true
 editor: visual
 ---
 
@@ -13,11 +14,15 @@ editor: visual
 
 library(tidyverse)
 library(flextable)
-library(officer)
 
-cdbk_1b <- openxlsx::read.xlsx("C:/Users/Clemens Lindner/Documents/github/bigot_and_tolerant_personalites/0_data/three_challenges_codebook.xlsx", sheet = 2) %>%
-  mutate(variable = tolower(variable))
+data.pth <- "C:/Users/Clemens Lindner/Documents/GitHub/bigot_and_tolerant_personalites/0_data/"
 
+ds1 <- read.csv(file = paste0(data.pth,"rwa_sdo_revisited_study_1a.csv"), header = TRUE, sep = ",", as.is = T, na.strings = c("-1","-9",NA)) %>% janitor::clean_names(.)
+
+cdbk_1a <- openxlsx::read.xlsx(paste0(data.pth,"three_challenges_codebook.xlsx"), sheet = 1) %>% mutate(variable = tolower(variable)) 
+cdbk_1b <- openxlsx::read.xlsx(paste0(data.pth,"three_challenges_codebook.xlsx"), sheet = 2) %>% mutate(variable = tolower(variable))
+cdbk_2  <- openxlsx::read.xlsx(paste0(data.pth,"three_challenges_codebook.xlsx"), sheet = 3)
+cdbk_3  <- openxlsx::read.xlsx(paste0(data.pth,"three_challenges_codebook.xlsx"), sheet = 4)
 ```
 
 ## Measures
@@ -42,7 +47,7 @@ cdbk_1b %>%
 
 ```
 
-Hello this is text
+{{< pagebreak >}}
 
 ```{r}
 #| echo: false
@@ -62,6 +67,219 @@ cdbk_1b %>%
 
 ```
 
+{{< pagebreak >}}
+
+```{r}
+#| echo: false
+#| label: tbl-con.itm
+#| tbl-cap: "Prejudice targets"
+
+trgts.1b <- 
+  cdbk_1b %>%
+  filter(scale == "Prejudice") %>%
+  pull(variable_label)
+  
+
+cdbk_1a %>%
+  filter(scale == "Prejudice") %>%
+  select(variable_label, english_item_translation, german_item_original, subscale) %>%
+  mutate(
+    'Only Study 1a' = case_when(variable_label %in% trgts.1b ~ NA,
+                                TRUE ~ "x")) %>%
+  rename("Orginal Item" = "german_item_original",
+         "English Translation" = "english_item_translation",
+         "Factor Political ID Target Group" = "subscale") %>%
+  select(-variable_label) %>%
+  rename_all(.,~str_wrap(.,20)) %>%
+  flextable() %>%
+  set_table_properties(width = 1,layout = "autofit")
+```
+
 # Study 2
 
+## Measures
+
+```{r}
+#| echo: false
+#| label: tbl-rwa.itm.2
+#| tbl-cap: "Traditionalism Items Study 2"
+
+cdbk_2 %>%
+  filter(scale == "RWA") %>%
+  select(full_item, coding) %>%
+  rename("Full Item" = "full_item",
+         "Coding" = "coding") %>%
+  flextable() %>%
+  set_table_properties(width = 1,layout = "autofit") %>%
+  footnote(
+    i = 1, j = 1,
+    value = as_paragraph(
+      cdbk_2 %>% 
+        filter(scale == "RWA") %>% 
+        slice(1) %>% 
+        pull(introduction)
+    ),
+    ref_symbols = "a",
+    part = "header"
+  ) %>%
+  footnote(
+    i = 1, j = 1,
+    value = as_paragraph(
+      cdbk_2 %>% 
+        filter(scale == "RWA") %>% 
+        slice(1) %>% 
+        pull(response_scale)
+    ),
+    ref_symbols = "b",
+    part = "header"
+  )
+
+```
+
+{{< pagebreak >}}
+
+```{r}
+#| echo: false
+#| label: tbl-prj.itm.2
+#| tbl-cap: "Prejudice Targets Study 2"
+
+cdbk_2 %>%
+  filter(str_detect(variable_label,"^prj_")) %>%
+  select(scale,full_item, coding) %>%
+  mutate(
+    scale = str_remove_all(scale,"Prejudice"),
+    scale = str_replace_all(scale,"_"," "),
+    scale = str_to_title(scale)
+  ) %>%
+  rename("Full Item" = "full_item",
+         "Target Group" = "scale",
+         "Coding" = "coding") %>%
+  flextable() %>%
+  set_table_properties(width = 1,layout = "autofit") %>%
+  footnote(
+    i = 1:3, j = 1,
+    value = as_paragraph(
+      cdbk_2 %>% 
+        filter(str_detect(variable_label,"^prj_")) %>% 
+        slice(1:3) %>%
+        pull(response_scale)
+    ),
+    ref_symbols = letters[1:3],
+    part = "body"
+  ) %>%
+  footnote(
+    i = 4:7, j = 1,
+    value = as_paragraph(
+      cdbk_2 %>% 
+        filter(str_detect(variable_label,"^prj_")) %>% 
+        slice(4) %>%
+        pull(response_scale)
+    ),
+    ref_symbols = letters[4],
+    part = "body"
+  ) %>%
+  footnote(
+    i = 8:9, j = 1,
+    value = as_paragraph(
+      cdbk_2 %>% 
+        filter(str_detect(variable_label,"^prj_")) %>% 
+        slice(8) %>%
+        pull(response_scale)
+    ),
+    ref_symbols = letters[5],
+    part = "body"
+  )
+
+
+```
+
+{{< pagebreak >}}
+
+## Results
+
+
+
 # Study 3
+
+## Measures
+
+```{r}
+#| echo: false
+#| label: tbl-rwa.itm.3
+#| tbl-cap: "Traditionalism Items Study 3"
+
+cdbk_3 %>%
+  filter(scale == "RWA") %>%
+  select(full_item,coding) %>%
+  rename("Full Item" = "full_item",
+         "Coding" = "coding") %>%
+  flextable() %>%
+  set_table_properties(width = 1,layout = "autofit") %>%
+  footnote(
+    i = 1, j = 1,
+    value = as_paragraph(
+      cdbk_2 %>% 
+        filter(scale == "RWA") %>% 
+        slice(1) %>% 
+        pull(introduction)
+    ),
+    ref_symbols = "a",
+    part = "header"
+  ) %>%
+  footnote(
+    i = 1, j = 1,
+    value = as_paragraph(
+      cdbk_2 %>% 
+        filter(scale == "RWA") %>% 
+        slice(1) %>% 
+        pull(response_scale)
+    ),
+    ref_symbols = "b",
+    part = "header"
+  )
+
+```
+
+```{r}
+#| echo: false
+#| label: tbl-prj.itm.3
+#| tbl-cap: "Prejudice Targets Study 3"
+
+cdbk_3 %>%
+  filter(str_detect(variable_label,"^prj_")) %>%
+  select(scale,full_item, coding) %>%
+  mutate(
+    scale = str_remove_all(scale,"Prejudice"),
+    scale = str_replace_all(scale,"_"," "),
+    scale = str_to_title(scale)
+  ) %>%
+  rename("Full Item" = "full_item",
+         "Target Group" = "scale",
+         "Coding" = "coding") %>%
+  flextable() %>%
+  set_table_properties(width = 1,layout = "autofit") %>%
+  footnote(
+    i = 1:3, j = 1,
+    value = as_paragraph(
+      cdbk_2 %>% 
+        filter(str_detect(variable_label,"^prj_gay")) %>% 
+        slice(1) %>%
+        pull(response_scale)
+    ),
+    ref_symbols = letters[1],
+    part = "body"
+  ) %>%
+  footnote(
+    i = 4:6, j = 1,
+    value = as_paragraph(
+      cdbk_2 %>% 
+        filter(str_detect(variable_label,"^prj_immi")) %>% 
+        slice(1:3) %>%
+        pull(response_scale)
+    ),
+    ref_symbols = letters[2:4],
+    part = "body"
+  ) 
+
+
+```
