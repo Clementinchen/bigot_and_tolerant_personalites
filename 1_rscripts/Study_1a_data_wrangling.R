@@ -57,11 +57,11 @@ scale_descriptives <- function(data, prefixes,single_items) {
 # DATA WRANGLING ----
 
 ## get data----
-ds1 <- read.csv('https://osf.io/ywpq4/download', 
+ds1_raw <- read.csv('https://osf.io/ywpq4/download', 
                 header = TRUE, sep = ",", as.is = T, na.strings = c("-9",NA)) %>%
   janitor::clean_names(.)
 
-ds1 <- read.csv(file = './0_data/rwa_sdo_revisited_study_1a.csv', 
+ds1_raw <- read.csv(file = './0_data/rwa_sdo_revisited_study_1a.csv', 
                 header = TRUE, sep = ",", as.is = T, na.strings = c("-1","-9",NA))  %>%
   janitor::clean_names(.)
 
@@ -76,10 +76,10 @@ rename_vars.1a <- setNames(cdbk_1a %>%
                            cdbk_1a %>%
                              pull(variable))
 
-ds1 <- ds1 %>%
+ds1_raw <- ds1_raw %>%
   rename_with(~ rename_vars.1a[.],.cols = all_of(names(rename_vars.1a)))
 
-ds1 <- ds1 %>%
+ds1_raw <- ds1_raw %>%
   select(case:mode,
          starts_with("rwa"),
          starts_with("sdo"),
@@ -87,8 +87,8 @@ ds1 <- ds1 %>%
          age:ncol(.))
 
 
-ds1 <- 
-  ds1 %>%
+ds1_raw <- 
+  ds1_raw %>%
   mutate(
     gender = factor(
       gender,
@@ -108,45 +108,47 @@ ds1 <-
 prdctrs <- c("rwa","sdo","polid")
 
 #get items
-rwa.itms <- ds1 %>% select(starts_with("rwa_")) %>% names()
-sdo.itms <- ds1 %>% select(starts_with("sdo_")) %>% names()
+rwa.itms <- ds1_raw %>% select(starts_with("rwa_")) %>% names()
+sdo.itms <- ds1_raw %>% select(starts_with("sdo_")) %>% names()
 
 #factor analysis
-fa_rwa.1a <- factanal(na.omit(ds1[,rwa.itms]), factors = 1, rotation = "oblimin")
+fa.parallel(na.omit(ds1_raw[,rwa.itms]),fm = "ml", fa = "fa", n.iter = 100)
+fa_rwa.1a <- fa(na.omit(ds1_raw[,rwa.itms]), nfactors = 1, rotate = "oblimin", fm = "ml")
 fa_rwa.1a
 
-fa_sdo.1a <- factanal(na.omit(ds1[,sdo.itms]), factors = 2, rotation = "varimax")
+fa.parallel(na.omit(ds1_raw[,sdo.itms]),fm = "ml", fa = "fa", n.iter = 100)
+fa_sdo.1a <- fa(na.omit(ds1_raw[,sdo.itms]), nfactors = 1, rotate = "oblimin", fm = "ml")
 fa_sdo.1a
 
 #descriptives and alpha
-scale_descriptives(ds1,c("rwa","sdo","polid"),single_items = TRUE) %>% as_tibble() %>% print(n = nrow(.))
+scale_descriptives(ds1_raw,c("rwa","sdo","polid"),single_items = TRUE) %>% as_tibble() %>% print(n = nrow(.))
 
-ds1 <- 
-  ds1 %>%
+ds1_raw <- 
+  ds1_raw %>%
   mutate(
-    rwa = rowMeans(select(.,rwa.itms),na.rm = T),
-    sdo = rowMeans(select(.,sdo.itms),na.rm = T)
+    rwa = rowMeans(select(.,all_of(rwa.itms)),na.rm = T),
+    sdo = rowMeans(select(.,all_of(sdo.itms)),na.rm = T)
   )
 
 
 ## DV: TARGETS ----
 
 #recode
-ds1 <- ds1 %>% mutate(across(starts_with("prj_"), ~ 12 - .))
+ds1_raw <- ds1_raw %>% mutate(across(starts_with("prj_"), ~ 12 - .))
 
 
 #Targets
 trgt.itms.1a <- 
-  ds1 %>%
+  ds1_raw %>%
   select(starts_with("prj_")) %>%
   names()
 
 ### FACTOR ANALYSIS -----
 
-psych::fa.parallel(ds1 %>% select(starts_with("prj_")))
+psych::fa.parallel(ds1_raw %>% select(starts_with("prj_")))
 
 fa_trgts.1a <- 
-  psych::fa(ds1 %>%
+  psych::fa(ds1_raw %>%
               select(starts_with("prj_")), 
             nfactors = 2, 
             rotate = "oblimin", 
@@ -160,7 +162,7 @@ fa_trgts.1a <-
          trgt_factor = as.factor(case_when(is.na(ML2) ~ "liberal",
                                            TRUE ~ "conservative")))
 
-sjPlot::tab_fa(ds1 %>%
+sjPlot::tab_fa(ds1_raw %>%
                  select(starts_with("prj_")), 
                nmbr.fctr = 2, 
                rotation = "oblimin",
@@ -168,7 +170,7 @@ sjPlot::tab_fa(ds1 %>%
                file = "./2_tables/fa_study_1a.html")
 
 ### DESCRIPTIVES ----
-scale_descriptives(ds1,trgt.itms.1a,single_items = TRUE) %>% as_tibble() %>% print(n = nrow(.))
+scale_descriptives(ds1_raw,trgt.itms.1a,single_items = TRUE) %>% as_tibble() %>% print(n = nrow(.))
 
 ### AGGREGATE ----
 
@@ -180,11 +182,11 @@ prj_con.trgts.1a <-
   fa_trgts.1a %>% filter(trgt_factor == "conservative") %>% row.names() #CONSERVATIVE TARGETS
 
 
-scale_descriptives(ds1,"prj",single_items = TRUE) %>% as_tibble() %>% print(n = nrow(.))
+scale_descriptives(ds1_raw,"prj",single_items = TRUE) %>% as_tibble() %>% print(n = nrow(.))
 
 
-ds1 <- 
-  ds1 %>%
+ds1_raw <- 
+  ds1_raw %>%
   rename_with(
     .cols = all_of(prj_lib.trgts.1a),       
     .fn   = ~ str_replace_all(., "prj", "prj.lib")
@@ -200,22 +202,27 @@ prj_lib.trgts.1a <-
 prj_con.trgts.1a <-
   fa_trgts.1a %>% filter(trgt_factor == "conservative") %>% row.names() #CONSERVATIVE TARGETS
 
-scale_descriptives(ds1,c("prj.lib","prj.con"),single_items = TRUE) %>% as_tibble() %>% print(n = nrow(.))
+scale_descriptives(ds1_raw,c("prj.lib","prj.con"),single_items = TRUE) %>% as_tibble() %>% print(n = nrow(.))
 
-ds1 <- 
-  ds1 %>%
+ds1_raw <- 
+  ds1_raw %>%
   mutate(
     prj_liberal      = rowMeans(select(.,starts_with("prj.lib")),na.rm = T),
     prj_conservative = rowMeans(select(.,starts_with("prj.con")),na.rm = T)
   )
 
-prj.trgts.1a     <- ds1 %>% select(starts_with("prj."))    %>% names() #ALL TARGETS
-prj_lib.trgts.1a <- ds1 %>% select(starts_with("prj.lib")) %>% names() #LIBERAL TARGETS
-prj_con.trgts.1a <- ds1 %>% select(starts_with("prj.con")) %>% names() #CONSERVATIVE TARGETS
+prj.trgts.1a     <- ds1_raw %>% select(starts_with("prj."))    %>% names() #ALL TARGETS
+prj_lib.trgts.1a <- ds1_raw %>% select(starts_with("prj.lib")) %>% names() #LIBERAL TARGETS
+prj_con.trgts.1a <- ds1_raw %>% select(starts_with("prj.con")) %>% names() #CONSERVATIVE TARGETS
 
+ds1_wde <- 
+  ds1_raw %>%
+  select(case,age,gender,education,
+         all_of(c(prdctrs,prj.trgts.1a)),
+         prj_liberal,prj_conservative)
 
-ds1_ana <- 
-  ds1 %>%
+ds1_lng <- 
+  ds1_raw %>%
   select(case,age,gender,education,
          rwa,sdo,polid,
          starts_with("prj")) %>%
@@ -229,3 +236,4 @@ ds1_ana <-
   mutate(prj_rating_scl = as.numeric(scale(prj_rating)),
          prj_rating_gmc = prj_rating - mean(prj_rating,na.rm = T)) %>%
   ungroup()
+
