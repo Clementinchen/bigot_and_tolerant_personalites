@@ -9,8 +9,9 @@ library(ggpubr)
 
 ### 1AA ----
 
+
 plot_1aa <- 
-  ds1 %>%
+  ds1_wde %>%
   select(case,rwa,sdo,all_of(trgt.itms.1a)) %>%
   tidyr::pivot_longer(cols = all_of(trgt.itms.1a),
                       names_to  = "target",

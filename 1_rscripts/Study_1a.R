@@ -1,3 +1,12 @@
+# LIBRARIES ----
+library(tidyverse)
+library(rlang)
+library(ggplot2)
+library(ggtext)
+library(ggpubr)
+library(lme4)
+
+
 # DEFINE FUNCTIONS ----
 
 biv_r <- 
@@ -30,108 +39,477 @@ biv_r <-
   }
 
 ## Target Variance
-library(rlang)
-trgt_var <- 
-  function(data, predictor, pred_split, trgt_centering) {
-    
-    data <- data %>%
-      mutate(
-        prj_rating_gmc = prj_rating - mean(prj_rating, na.rm = TRUE)
-      )
-    
-    # ---- hier sauberer Kontrollfluss ----
-    if (pred_split == "median") {
-      data <- data %>%
-        mutate(
-          pred_hilo = case_when(
-            {{ predictor }} > median({{ predictor }}, na.rm = TRUE) ~  "high", TRUE ~ "low"
-          )
-        )
-    }
-    
-    if (pred_split == "mean") {
-      data <- data %>%
-        mutate(
-          pred_hilo = case_when(
-            {{ predictor }} > mean({{ predictor }}, na.rm = TRUE) ~ "high", TRUE ~ "low"
-          )
-        )
-    }
-    data <- data %>% filter(!is.na(pred_hilo))
-    res <- data %>%
-      group_by(prj_target) %>%
-      mutate(
-        prj_rating_scl = as.numeric(scale(prj_rating)),
-        prj_rating_cwc = prj_rating - mean(prj_rating, na.rm = TRUE)
-      ) %>%
-      ungroup() %>%
-      pivot_longer(
-        cols = c(prj_rating, prj_rating_scl, prj_rating_gmc, prj_rating_cwc),
-        names_to = "trgt_cent",
-        values_to = "prj_rating"
-      ) %>%
-      mutate(
-        trgt_cent = if_else(
-          trgt_cent == "prj_rating",
-          "prj_rating_none",
-          trgt_cent
-        )
-      ) %>%
-      group_by(pred_hilo, prj_target, trgt_cent) %>%
-      summarise(mean = mean(prj_rating, na.rm = TRUE), .groups = "drop") %>%
-      pivot_wider(names_from = "pred_hilo", values_from = "mean") %>%
-      mutate(diff = abs(high - low))
-    
-    res <- res %>%
-      mutate(
-        trgt_cent = str_remove_all(trgt_cent,"prj_rating_"),
-        trgt_cent = recode(trgt_cent,
-                           "scl" = "z-score")
-      )
-    
-    if (!trgt_centering %in% c("none","cwc","gmc","z-score")) {
-      stop("trgt_centering must be one of: none, cwc, gmc, z-score")
-    }
-    
-    res <- res %>%
-      filter(trgt_cent == trgt_centering) %>%
-      select(-trgt_cent)
-    
-    cor_hilo <- res %>%
-      correlation::correlation(
-        select = c("high","low"),
-        method = "pearson",
-        missing = "keep_pairwise"
-      )
-    
-    cat("\nMean prejudice ratings by target group within the high and low",toupper(deparse(substitute(predictor))),"subsample. Target Centering:",toupper(trgt_centering),"\n\n")
-    print(res, n = nrow(res))
-    
-    cat("\nCorrelation in prejudice ratings between high and low",toupper(deparse(substitute(predictor))),"subsamples\n")
-    print(cor_hilo)
-    
+trgt_var <- function(data,
+                     predictor,
+                     prejudice,
+                     pred_split = c("mean", "median", "1sd", "2sd"),
+                     trgt_centering = c("raw", "gmc", "cwc", "z", "none")) {
+  
+  # -----------------------------
+  # 1. Validate inputs
+  # -----------------------------
+  pred_split <- match.arg(pred_split)
+  trgt_centering <- match.arg(trgt_centering)
+  
+  if (trgt_centering == "none") {
+    trgt_centering <- "raw"
   }
+  
+  if (!all(c(predictor, prejudice) %in% names(data))) {
+    stop("Predictor or prejudice variables not found in data.")
+  }
+  
+  # -----------------------------
+  # 2. Select & reshape data
+  # -----------------------------
+  data <- data %>%
+    dplyr::select(dplyr::all_of(c(predictor, prejudice))) %>%
+    dplyr::rename(predictor = .data[[predictor]]) %>%
+    tidyr::pivot_longer(
+      cols = dplyr::all_of(prejudice),
+      names_to = "prejudice_target",
+      values_to = "prj_rating_raw"
+    )
+  
+  # -----------------------------
+  # 3. Compute centering variables
+  # -----------------------------
+  grand_mean <- mean(data$prj_rating_raw, na.rm = TRUE)
+  
+  data <- data %>%
+    dplyr::group_by(prejudice_target) %>%
+    dplyr::mutate(
+      prj_clstr_mean = mean(prj_rating_raw, na.rm = TRUE),
+      prj_rating_z   = as.numeric(scale(prj_rating_raw))
+    ) %>%
+    dplyr::ungroup() %>%
+    dplyr::mutate(
+      prj_grand_mean = grand_mean,
+      prj_rating_gmc = prj_rating_raw - prj_grand_mean,
+      prj_rating_cwc = prj_rating_raw - prj_clstr_mean
+    )
+  
+  # -----------------------------
+  # 4. Predictor statistics
+  # -----------------------------
+  pred_mean   <- mean(data$predictor, na.rm = TRUE)
+  pred_median <- median(data$predictor, na.rm = TRUE)
+  pred_sd     <- sd(data$predictor, na.rm = TRUE)
+  
+  data <- data %>%
+    dplyr::mutate(
+      predictor_split_mean = dplyr::case_when(
+        is.na(predictor) ~ NA_character_,
+        predictor > pred_mean ~ "high",
+        TRUE ~ "low"
+      ),
+      predictor_split_median = dplyr::case_when(
+        is.na(predictor) ~ NA_character_,
+        predictor > pred_median ~ "high",
+        TRUE ~ "low"
+      ),
+      predictor_split_1sd = dplyr::case_when(
+        is.na(predictor) ~ NA_character_,
+        predictor > (pred_median + pred_sd) ~ "high",
+        predictor < (pred_median - pred_sd) ~ "low",
+        TRUE ~ NA_character_
+      ),
+      predictor_split_2sd = dplyr::case_when(
+        is.na(predictor) ~ NA_character_,
+        predictor > (pred_median + 2 * pred_sd) ~ "high",
+        predictor < (pred_median - 2 * pred_sd) ~ "low",
+        TRUE ~ NA_character_
+      )
+    )
+  
+  # -----------------------------
+  # 5. Dynamic variable selection
+  # -----------------------------
+  group_var <- paste0("predictor_split_", pred_split)
+  prj_var   <- paste0("prj_rating_", trgt_centering)
+  
+  # -----------------------------
+  # 6. Aggregate & reshape
+  # -----------------------------
+  result <- data %>%
+    dplyr::group_by(prejudice_target, .data[[group_var]]) %>%
+    dplyr::summarise(
+      prejudice_mean = mean(.data[[prj_var]], na.rm = TRUE),
+      .groups = "drop"
+    ) %>%
+    filter(!is.na(.data[[group_var]])) %>% 
+    tidyr::pivot_wider(
+      names_from = .data[[group_var]],
+      values_from = prejudice_mean
+    ) %>%
+    dplyr::mutate(
+      absolute_diff = abs(high - low),
+      prejudice_target = prejudice_target |>
+        stringr::str_replace_all("[[:punct:]]", " ") |>
+        stringr::str_to_title()
+    )
+  
+  # -----------------------------
+  # 7. Correlation
+  # -----------------------------
+  cor_hilo <- correlation::correlation(
+    result,
+    select = c("high", "low"),
+    method = "pearson",
+    missing = "keep_pairwise"
+  )
+  
+  # -----------------------------
+  # 8. Output
+  # -----------------------------
+  cat(
+    "\nMean prejudice ratings by target group within the high and low",
+    toupper(predictor),
+    "subsample.\nTarget Centering:",
+    toupper(trgt_centering),
+    "\n\n"
+  )
+  
+  print(result, n = nrow(result))
+  
+  cat(
+    "\nCorrelation in prejudice ratings between high and low",
+    toupper(predictor),
+    "subsamples\n"
+  )
+  
+  print(cor_hilo)
+  
+  # return invisibly for programmatic use
+  invisible(list(
+    data = result,
+    correlation = cor_hilo
+  ))
+}
 
 
-# ANALYSES ----
+bootstrap_icc <- function(model,
+                          iterations,
+                          type) {
+  
+  # ------------------------------------------------------------
+  # helper: smart rounding
+  # ------------------------------------------------------------
+  smart_round <- function(x, digits = 2, max_digits = 6) {
+    for (d in digits:max_digits) {
+      r <- round(x, d)
+      if (r != 0) {
+        return(formatC(r, format = "f", digits = d))
+      }
+    }
+    formatC(0, format = "f", digits = max_digits)
+  }
+  
+  # ------------------------------------------------------------
+  # summary function
+  # ------------------------------------------------------------
+  mysumm <- function(m) {
+    
+    sigma2 <- getME(m, "sigma")^2
+    
+    taus <- (getME(m, "theta") * getME(m, "sigma"))^2
+    names(taus) <- names(getME(m, "cnms"))
+    
+    total_var <- sigma2 + sum(taus)
+    
+    ICCs <- taus / total_var
+    
+    c(
+      sigma2 = sigma2,
+      setNames(taus, paste0("tau2_", names(taus))),
+      setNames(ICCs, paste0("ICC_", names(ICCs))),
+      vp_residual = sigma2 / total_var
+    )
+  }
+  
+  # ------------------------------------------------------------
+  # bootstrap
+  # ------------------------------------------------------------
+  boot <- bootMer(
+    model,
+    FUN = mysumm,
+    nsim = iterations,
+    type = type,
+    use.u = FALSE
+  )
+  
+  # ------------------------------------------------------------
+  # results table
+  # ------------------------------------------------------------
+  results <- data.frame(
+    observed = boot$t0,
+    CI_norm  = NA_character_,
+    CI_basic = NA_character_,
+    CI_perc  = NA_character_
+  )
+  
+  # ------------------------------------------------------------
+  # confidence intervals
+  # ------------------------------------------------------------
+  for (i in seq_len(nrow(results))) {
+    
+    ci <- boot::boot.ci(
+      boot,
+      index = i,
+      conf = .95,
+      type = c("norm", "basic", "perc")
+    )
+    
+    results$CI_norm[i]  <- paste0(
+      "[",
+      smart_round(ci$normal[2]), ", ",
+      smart_round(ci$normal[3]), "]"
+    )
+    
+    results$CI_basic[i] <- paste0(
+      "[",
+      smart_round(ci$basic[4]), ", ",
+      smart_round(ci$basic[5]), "]"
+    )
+    
+    results$CI_perc[i]  <- paste0(
+      "[",
+      smart_round(ci$percent[4]), ", ",
+      smart_round(ci$percent[5]), "]"
+    )
+  }
+  
+  results
+}
 
-## INCONSISTENT PREDICTION ----
 
-### BIVARIATE CORRELATIONS ----
+# MAIN TEXT ----
 
-#predictors
+## descriptives ----
+
+ds1_wde %>%
+  select(all_of(prdctrs),starts_with("prj")) %>%
+  tidyr::pivot_longer(cols = 1:ncol(.),names_to = "variable") %>%
+  #group_by(variable) %>%
+  reframe(Mean = mean(value, na.rm = T),
+          SD = sd(value, na.rm = T),
+          Median = median(value, na.rm = T),
+          Min = min(value,na.rm = T),
+          Max = max(value, na.rm = T),
+          range = abs(Max-Min),
+          .by = variable) %>%
+  mutate(
+    'Target_Group' = case_when(str_detect(variable,"prj.con") ~ "Conservative",
+                               str_detect(variable,"prj.lib") ~ "Liberal",
+                               TRUE ~ NA),
+    variable = str_remove_all(variable,c("prj.con_|prj.lib_|prj_agg.")),
+    variable = str_replace_all(variable,"_"," "),
+    variable = str_to_title(variable)
+  ) %>%
+  arrange(!is.na(Target_Group),Target_Group) %>%
+  sjPlot::tab_df()
+
+## demographics ----
+
+ds1_wde %>%
+  select(age,polid) %>%
+  tidyr::pivot_longer(cols = 1:ncol(.),names_to = "variable") %>%
+  #group_by(variable) %>%
+  reframe(Mean = mean(value, na.rm = T),
+          SD = sd(value, na.rm = T),
+          Median = median(value, na.rm = T),
+          Min = min(value,na.rm = T),
+          Max = max(value, na.rm = T),
+          range = abs(Max-Min),
+          n = n(),
+          .by = variable) %>%
+  data.frame() %>%
+  plyr::rbind.fill(.,
+                   ds1_wde %>%
+                     janitor::tabyl(gender) %>%
+                     select(-valid_percent) %>%
+                     mutate(variable = "gender") %>%
+                     rename("response" = "gender") %>%
+                     data.frame()
+  ) %>% 
+  plyr::rbind.fill(
+    ds1_wde %>%
+      janitor::tabyl(education) %>%
+      select(-valid_percent) %>%
+      mutate(variable = "education") %>%
+      rename("response" = "education") %>%
+      data.frame()
+  )%>%
+  sjPlot::tab_df()
+
+## 1. bivariate correlations (Replication Chambers et al., 2013) ----
+
+### predictors ----
 biv_r(data = ds1_wde, vars1 = prdctrs,vars2 = NULL ,method  = "pearson",missing = "keep_pairwise",ci = .95, p_adjust = "none")
 
+### predictor - targets ----
+
 #rwa - targets
-biv_r(data = ds1_wde, vars1 = "rwa", vars2 = prj.trgts.1a, method  = "pearson",missing = "keep_pairwise",ci = .95, p_adjust = "holm")
+biv_r(data = ds1_wde, vars1 = "rwa", vars2 = prj_all.grps.1a, method  = "pearson",missing = "keep_pairwise",ci = .95, p_adjust = "holm")
 
 #sdo - targets
-biv_r(data = ds1_wde, vars1 = "sdo", vars2 = prj.trgts.1a, method  = "pearson",missing = "keep_pairwise",ci = .95, p_adjust = "holm")
+biv_r(data = ds1_wde, vars1 = "sdo", vars2 = prj_all.grps.1a, method  = "pearson",missing = "keep_pairwise",ci = .95, p_adjust = "holm")
 
-### Correlations Target Factors
-#rwa - targets
-biv_r(data = ds1_wde, vars1 = c("rwa","sdo"), vars2 = c("prj_liberal","prj_conservative"), method  = "pearson",missing = "keep_pairwise",ci = .95, p_adjust = "holm")
+#polid - targets
+biv_r(data = ds1_wde, vars1 = "polid", vars2 = prj_all.grps.1a, method  = "pearson",missing = "keep_pairwise",ci = .95, p_adjust = "holm")
 
+
+#Correlations Target Factors
+#predictors - targets
+biv_r(data = ds1_wde, vars1 = c("rwa","sdo","polid"), vars2 = c("prj_agg.lib.grps","prj_agg.con.grps"), method  = "pearson",missing = "keep_pairwise",ci = .95, p_adjust = "holm")
+
+### left-right interaction ----
+
+#prepare long data set with relevant variables
+lm_dat.1a <-
+  ds1_wde %>%
+  select(case,rwa,sdo,prj_agg.con.grps,prj_agg.lib.grps) %>%
+  mutate(across(-case,~as.numeric(scale(.)))) %>%
+  pivot_longer(cols = c(prj_agg.con.grps,prj_agg.lib.grps),
+               names_to = "trgt_fct",
+               values_to = "prj_mean")
+
+#put controls in
+lm_dat.1a <-
+  lm_dat.1a %>%
+  full_join(.,
+            ds1_wde %>%
+              select(case,age,gender,education,polid),
+            by = "case")
+
+
+#run models
+#rwa
+lm_rwa.1a_no_cntrls <- lm(prj_mean ~ rwa*trgt_fct, data = lm_dat.1a) #no controls
+lm_rwa.1a_cntrls    <- lm(prj_mean ~ rwa*trgt_fct + age + gender + education + polid, data = lm_dat.1a) #controlling for age, gender, education, political self placement
+
+summary(lm_rwa.1a_no_cntrls)
+summary(lm_rwa.1a_cntrls)
+
+interactions::sim_slopes(lm_rwa.1a_no_cntrls, pred = rwa, modx = trgt_fct)
+interactions::sim_slopes(lm_rwa.1a_cntrls,    pred = rwa, modx = trgt_fct)
+
+interactions::interact_plot(lm_rwa.1a_no_cntrls, pred = rwa, modx = trgt_fct,interval = T)  
+interactions::interact_plot(lm_rwa.1a_cntrls, pred = rwa, modx = trgt_fct,interval = T)  
+
+#sdo
+lm_sdo.1a_no_cntrls <- lm(prj_mean ~ sdo*trgt_fct, data = lm_dat.1a) #no controls
+lm_sdo.1a_cntrls    <- lm(prj_mean ~ sdo*trgt_fct + age + gender + education + polid, data = lm_dat.1a) #controlling for age, gender, education, political self placement
+
+summary(lm_sdo.1a_no_cntrls)
+summary(lm_sdo.1a_cntrls)
+
+interactions::sim_slopes(lm_sdo.1a_no_cntrls, pred = sdo, modx = trgt_fct)
+interactions::sim_slopes(lm_sdo.1a_cntrls, pred = sdo, modx = trgt_fct)
+
+interactions::interact_plot(lm_sdo.1a_no_cntrls, pred = sdo, modx = trgt_fct,interval = T)  
+interactions::interact_plot(lm_sdo.1a_cntrls, pred = sdo, modx = trgt_fct,interval = T)  
+
+## Plot
+r_rwa.lib.1a <- gsub("0.",".",round(cor(ds1_wde$rwa,ds1_wde$prj_agg.lib.grps,use = "pairwise"),2))
+r_rwa.con.1a <- gsub("0.",".",round(cor(ds1_wde$rwa,ds1_wde$prj_agg.con.grps,use = "pairwise"),2))
+r_sdo.lib.1a <- gsub("0.",".",round(cor(ds1_wde$sdo,ds1_wde$prj_agg.lib.grps,use = "pairwise"),2))
+r_sdo.con.1a <- gsub("0.",".",round(cor(ds1_wde$sdo,ds1_wde$prj_agg.con.grps,use = "pairwise"),2))
+
+lm_dat.1a %>%
+  pivot_longer(cols = c("rwa","sdo"),
+               names_to = "scale",
+               values_to = "score") %>%
+  mutate(
+    scale = forcats::fct_recode(scale, "RWA" = "rwa","SDO"="sdo"),
+    trgt_fct = case_when(str_detect(trgt_fct,"con.grps") ~ "Conservative",
+                         str_detect(trgt_fct,"lib.grps") ~ "Liberal")
+    ) %>%
+  ggplot(aes(y = prj_mean, x = score, color = trgt_fct, linetype = scale)) +
+  geom_smooth(se = FALSE, method = lm, size = 0.9) + 
+  ggtitle("Study 1a") +
+  scale_color_manual(values = c(
+    "Liberal" = "#336699",  
+    "Conservative" = "#990000")) +
+  labs(y = "Prejudice", x = "Predictor", color = "Target",linetype = "Scale") +
+  theme_minimal() +
+  theme(legend.position = "bottom",
+        plot.title = element_text(hjust = 0.5, face = "bold")) +
+  annotate(geom = "richtext", x = 0, y = -0.4, 
+           label = paste0("<i>r<sub>RWA</sub></i> =",r_rwa.con.1a),
+           hjust = 0,
+           size = 4, 
+           fill = NA, 
+           label.color = NA,
+           colour = "#990000") +
+  annotate(geom = "richtext", x = 0, y = -0.5, 
+           label = paste0("<i>r<sub>SDO</sub></i>",r_sdo.con.1a),
+           hjust = 0,
+           size = 4, 
+           fill = NA, 
+           label.color = NA,
+           colour = "#990000") +
+  annotate(geom = "richtext", x = 0, y = .5, 
+           label = paste0("<i>r<sub>RWA</sub></i> =",r_rwa.lib.1a),
+           hjust = 0,
+           size = 4, 
+           fill = NA, 
+           label.color = NA,
+           colour = "#336699") +
+  annotate(geom = "richtext", x = 0, y = 0.4, 
+           label = paste0("<i>r<sub>SDO</sub></i>",r_sdo.lib.1a),
+           hjust = 0,
+           size = 4, 
+           fill = NA, 
+           label.color = NA,
+           colour = "#336699")
+
+
+
+## 2. Comparing within- and between-target variance ----
+
+#function
+#data = data in wide format
+#predictor = select individual difference variable
+#prejudice = select one or more prejudice variable
+#select stat to split the sample along the predicotr pred_split = c("mean", "median", "1sd", "2sd"),
+#how should targets be centered, considering between target variance trgt_centering = c("raw", "gmc", "cwc", "z", "none"
+
+#RWA
+trgt_var(data = ds1_wde,predictor = "rwa",prejudice = prj_all.grps.1a,pred_split = "median",trgt_centering = "raw")
+trgt_var(data = ds1_wde,predictor = "rwa",prejudice = prj_all.grps.1a,pred_split = "median",trgt_centering = "cwc")
+trgt_var(data = ds1_wde,predictor = "rwa",prejudice = prj_all.grps.1a,pred_split = "median",trgt_centering = "z")
+
+#SDO
+trgt_var(data = ds1_wde,predictor = "sdo",prejudice = prj_all.grps.1a,pred_split = "median",trgt_centering = "raw")
+trgt_var(data = ds1_wde,predictor = "sdo",prejudice = prj_all.grps.1a,pred_split = "median",trgt_centering = "cwc")
+trgt_var(data = ds1_wde,predictor = "sdo",prejudice = prj_all.grps.1a,pred_split = "median",trgt_centering = "z")
+
+
+## 3. Multilevel variance decomposition ----
+
+var_decomp_1a <- 
+  ds1_wde %>%
+  select(case,rwa,sdo,starts_with("prj.")) %>%
+  tidyr::pivot_longer(cols = starts_with("prj"),
+                      names_to = "target",
+                      values_to = "rating") %>%
+  filter(complete.cases(.))
+
+mod_rwa_1a = lmer(rating ~ 1 + (1|case) + (1|target) + (1|rwa), data = var_decomp_1a)
+mod_sdo_1a = lmer(rating ~ 1 + (1|case) + (1|target) + (1|sdo), data = var_decomp_1a)
+
+summary(mod_rwa_1a)
+summary(mod_sdo_1a)
+
+bootstrap_icc(mod_rwa_1a,iterations = 1000,type = "parametric")
+bootstrap_icc(mod_sdo_1a,iterations = 1000,type = "parametric")
+
+sjPlot::tab_model(mod_rwa_1a, show.std = T,show.est = F)
+sjPlot::tab_model(mod_sdo_1a, show.std = T,show.est = F)
+
+
+# SUPPLEMENTARY MATERIALS ----
 
 ### PARTIAL CORRELATIONS -----
 partial <- expand_grid(
@@ -162,168 +540,3 @@ partial <- expand_grid(
   })
 
 partial[,c(1,2,12,11,3:6,9)]
-
-## IDEOLOGICAL CONFLICT ----
-
-### Left-right interaction ----
-
-#rwa
-lm_rwa.1a_no_cntrls <- lm(prj_rating ~ rwa_scl*trgt_fct, data = ds1_lng) #no controls
-lm_rwa.1a_cntrls    <- lm(prj_rating ~ rwa_scl*trgt_fct + age + gender + education + polid, data = ds1_lng) #controlling for age, gender, education, political self placement
-
-summary(lm_rwa.1a_no_cntrls)
-summary(lm_rwa.1a_cntrls)
-
-interactions::sim_slopes(lm_rwa.1a_no_cntrls, pred = rwa_scl, modx = trgt_fct)
-interactions::sim_slopes(lm_rwa.1a_cntrls, pred = rwa_scl, modx = trgt_fct)
-
-interactions::interact_plot(lm_rwa.1a_no_cntrls, pred = rwa_scl, modx = trgt_fct,interval = T)  
-interactions::interact_plot(lm_rwa.1a_cntrls, pred = rwa_scl, modx = trgt_fct,interval = T)  
-
-#sdo
-lm_sdo.1a_no_cntrls <- lm(prj_rating ~ sdo_scl*trgt_fct, data = ds1_lng) #no controls
-lm_sdo.1a_cntrls    <- lm(prj_rating ~ sdo_scl*trgt_fct + age + gender + education + polid, data = ds1_lng) #controlling for age, gender, education, political self placement
-
-summary(lm_sdo.1a_no_cntrls)
-summary(lm_sdo.1a_cntrls)
-
-interactions::sim_slopes(lm_sdo.1a_no_cntrls, pred = sdo_scl, modx = trgt_fct)
-interactions::sim_slopes(lm_sdo.1a_cntrls, pred = sdo_scl, modx = trgt_fct)
-
-interactions::interact_plot(lm_sdo.1a_no_cntrls, pred = sdo_scl, modx = trgt_fct,interval = T)  
-interactions::interact_plot(lm_sdo.1a_cntrls, pred = sdo_scl, modx = trgt_fct,interval = T)  
-
-## Plot
-
-ds1_lng %>%
-  pivot_longer(cols = c(rwa_scl,sdo_scl), names_to = "predictor", values_to = "score_scl") %>%
-  ggplot(aes(y = prj_rating, x = score_scl,color = trgt_fct)) +
-  geom_smooth(se = T, method = lm) +
-  facet_wrap(~predictor) +
-  theme_minimal()
-
-
-## HIGHLIGHTING TARGET VARIANCE ----
-trgt_var(data = ds1_lng,predictor = rwa,pred_split = "median",trgt_centering = "none")
-trgt_var(data = ds1_lng,predictor = rwa,pred_split = "median",trgt_centering = "cwc")
-trgt_var(data = ds1_lng,predictor = rwa,pred_split = "median",trgt_centering = "z-score")
-
-trgt_var(data = ds1_lng,predictor = sdo,pred_split = "median",trgt_centering = "none")
-trgt_var(data = ds1_lng,predictor = sdo,pred_split = "median",trgt_centering = "cwc")
-trgt_var(data = ds1_lng,predictor = sdo,pred_split = "median",trgt_centering = "z-score")
-
-
-## SHARED PREJUDICE ----
-
-
-### SAMPLE SPLIT ----
-
-split.1a <- 
-  ds1_wde %>%
-  select(case,rwa,sdo,all_of(prj.trgts.1a)) %>%
-  tidyr::pivot_longer(cols = 4:ncol(.),names_to = "target",values_to = "rating") %>%
-  tidyr::pivot_longer(cols = 2:3,names_to = "scale",values_to = "value") %>%
-  group_by(scale) %>%
-  mutate(hilo = case_when(value > median(value,na.rm = T) ~ "high",
-                          TRUE ~ "low")) %>%
-  ungroup() %>%
-  group_by(target,scale,hilo) %>%
-  summarise(m = mean(rating,na.rm = T)) %>%
-  tidyr::pivot_wider(names_from = "hilo",  values_from = m) %>%
-  mutate(diff = abs(high-low)) %>%
-  tidyr::pivot_wider(names_from = "scale",
-                     values_from = c("high","low","diff"),
-                     names_glue = "{scale}_{.value}") %>%
-  ungroup()
-  
-  
-list(data = split.1a,
-     means = split.1a %>%
-       summarise_if(is.numeric,mean, na.rm = TRUE),
-     sd = split.1a %>%
-       summarise_if(is.numeric,sd, na.rm = TRUE),
-     corr = split.1a %>% select(!ends_with("_diff")) %>% correlation::correlation()
-     )
-
-
-### VARIANCE DECOMPOSITION ----
-
-mlm_1a <- 
-  ds1_wde %>%
-  select(case,rwa,sdo,starts_with("prj")) %>%
-  tidyr::pivot_longer(cols = starts_with("prj"),
-                      names_to = "target",
-                      values_to = "rating")
-
-mlm_rwa_1a <- lme4::lmer(rating ~ rwa + (rwa|target), data = mlm_1a)
-summary(mlm_rwa_1a)
-
-mlm_sdo_1a <- lme4::lmer(rating ~ sdo + (sdo|target), data = mlm_1a)
-summary(mlm_sdo_1a)
-
-sjPlot::tab_model(mlm_rwa_1a, show.std = T,show.est = F)
-sjPlot::tab_model(mlm_sdo_1a, show.std = T,show.est = F)
-
-sjPlot::tab_model(mlm_rwa_1a,mlm_sdo_1a,show.std = T,show.est = F,
-                  file = "variance_decomp_mlm_study1a.html")
-
-r2mlm::r2mlm(mlm_rwa_1a)$R2s %>%
-  round(.,4)
-r2mlm::r2mlm(mlm_sdo_1a)$R2s %>%
-  round(.,4)
-
-# DESCRIPTIVES ----
-
-ds1_wde %>%
-  select(all_of(prdctrs),starts_with("prj"),prj_liberal,prj_conservative) %>%
-  tidyr::pivot_longer(cols = 1:ncol(.),names_to = "variable") %>%
-  #group_by(variable) %>%
-  reframe(Mean = mean(value, na.rm = T),
-            SD = sd(value, na.rm = T),
-            Median = median(value, na.rm = T),
-            Min = min(value,na.rm = T),
-            Max = max(value, na.rm = T),
-            range = abs(Max-Min),
-          .by = variable) %>%
-  print(n = nrow(.))
-
-# DEMOGRAFICS ----
-
-ds1_wde %>%
-  select(age,polid) %>%
-  tidyr::pivot_longer(cols = 1:ncol(.),names_to = "variable") %>%
-  #group_by(variable) %>%
-  reframe(Mean = mean(value, na.rm = T),
-          SD = sd(value, na.rm = T),
-          Median = median(value, na.rm = T),
-          Min = min(value,na.rm = T),
-          Max = max(value, na.rm = T),
-          range = abs(Max-Min),
-          n = n(),
-          .by = variable) %>%
-  data.frame() %>%
-  plyr::rbind.fill(.,
-                   ds1_wde %>%
-                     mutate(gender = case_when(gender == 1 ~ "female",
-                                               gender == 2 ~ "male",
-                                               TRUE~ "other")) %>%
-                     janitor::tabyl(gender) %>%
-                     rename("variable"="gender") %>%
-                     data.frame()
-  ) %>% 
-  plyr::rbind.fill(
-    ds1_wde %>%
-      mutate(education = case_when(education == 1 ~ "es_isced_1",
-                                   education == 2 ~ "es_isced_2",
-                                   education == 3 ~ "es_isced_3",
-                                   education == 4 ~ "es_isced_4",
-                                   education == 5 ~ "es_isced_5",
-                                   education == 6 ~ "es_isced_6",
-                                   education == 7 ~ "es_isced_7",
-                                   TRUE ~ NA)) %>%
-      janitor::tabyl(education) %>%
-      rename("variable"="education") %>%
-      select(-valid_percent) %>%
-      data.frame()
-  )
-
