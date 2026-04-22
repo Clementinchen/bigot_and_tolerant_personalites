@@ -282,6 +282,212 @@ bootstrap_icc <- function(model,
   results
 }
 
+plot_int_prd.trgt <- function(id_var, data, pred_vars, prj_targets, title = NULL) {
+  
+  if (!all(c(pred_vars, prj_targets) %in% names(data))) {
+    stop("Predictor or prejudice variables not found in data.")
+  }
+  
+  data <- 
+    data %>%
+    dplyr::select(dplyr::all_of(c(id_var, pred_vars, prj_targets))) %>%
+    dplyr::mutate(across(-{{ id_var }}, ~as.numeric(scale(.)))) %>%
+    tidyr::pivot_longer(cols = all_of(pred_vars), names_to = "scale", values_to = "score") %>%
+    tidyr::pivot_longer(cols = all_of(prj_targets), names_to = "trgt_fct", values_to = "prejudice") %>%
+    dplyr::mutate(
+      trgt_fct = as.factor(dplyr::case_when(
+        stringr::str_detect(trgt_fct, "con.grps") ~ "Conservative",
+        stringr::str_detect(trgt_fct, "lib.grps") ~ "Liberal"
+      )),
+      scale = stringr::str_to_upper(scale)
+    )
+  
+  if (is.null(title)) title <- "Default Title"
+  
+  cors <- 
+    data %>%
+    group_by(scale,trgt_fct) %>%
+    summarise(r = cor(score,prejudice,use = "pairwise",method = "pearson")) %>%
+    mutate(name = paste(scale, trgt_fct, sep = "_"),
+           r = round(r,2),
+           r = str_replace_all(r,"0.",".")) %>%
+    ungroup() %>%
+    select(name,r) %>%
+    deframe()
+  
+  print(cors)
+  
+  ggplot2::ggplot(data, ggplot2::aes(y = prejudice, x = score, color = trgt_fct, linetype = scale)) +
+    ggplot2::geom_smooth(se = FALSE, method = "lm", linewidth = 0.9) +
+    ggplot2::ggtitle(title) +
+    labs(y = "Prejudice", x = "Predictor", color = "Target",linetype = "Scale") +
+    theme_minimal() +
+    theme(legend.position = "bottom",
+          plot.title = element_text(hjust = 0.5, face = "bold")) + 
+    scale_color_manual(values = c(
+      "Liberal" = "#336699",  
+      "Conservative" = "#990000")) +
+    labs(y = "Prejudice", x = "Predictor", color = "Target",linetype = "Scale") +
+    theme_minimal() +
+    theme(legend.position = "bottom",
+          plot.title = element_text(hjust = 0.5, face = "bold")) +
+    annotate(geom = "richtext", x = 2, y = -0.15, 
+             label = paste0("<i>r<sub>RWA</sub></i> = ",cors["RWA_Conservative"]),
+             hjust = 0,
+             size = 4, 
+             fill = NA, 
+             label.color = NA,
+             colour = "#990000") +
+    annotate(geom = "richtext", x = 2, y = -.35, 
+             label = paste0("<i>r<sub>SDO</sub></i> = ",cors["SDO_Conservative"]),
+             hjust = 0,
+             size = 4, 
+             fill = NA, 
+             label.color = NA,
+             colour = "#990000") +
+    annotate(geom = "richtext", x = 2, y = .9, 
+             label = paste0("<i>r<sub>RWA</sub></i> = ",cors["RWA_Liberal"]),
+             hjust = 0,
+             size = 4, 
+             fill = NA, 
+             label.color = NA,
+             colour = "#336699") +
+    annotate(geom = "richtext", x =2, y = .7, 
+             label = paste0("<i>r<sub>SDO</sub></i> = ",cors["SDO_Liberal"]),
+             hjust = 0,
+             size = 4, 
+             fill = NA, 
+             label.color = NA,
+             colour = "#336699")
+
+}
+
+
+plot_trgt_means <- function(data, predictors, prejudice,
+                            pred_split = "median",
+                            trgt_centering = "raw") {
+  
+  library(dplyr)
+  library(tidyr)
+  library(stringr)
+  library(purrr)
+  library(ggplot2)
+  library(correlation)
+  
+  # -----------------------------
+  # 1. Daten erzeugen
+  # -----------------------------
+  plot_data <- map_dfr(predictors, function(pred) {
+    
+    trgt_var(
+      data = data,
+      predictor = pred,
+      prejudice = prejudice,
+      pred_split = pred_split,
+      trgt_centering = trgt_centering
+    )$data %>%
+      
+      mutate(scale = toupper(pred))
+    
+  })
+  
+  
+  # -----------------------------
+  # 2. Korrelationen berechnen
+  # -----------------------------
+  cor_df <- plot_data %>%
+    group_by(scale) %>%
+    summarise(
+      r = correlation::correlation(
+        data.frame(high, low),
+        method = "pearson"
+      )$r[1],
+      .groups = "drop"
+    )
+  
+  # Label bauen (für Plot)
+  cor_label <- paste0(
+    paste0(
+      "r<sub>", cor_df$scale, "</sub> = ",
+      sprintf("%.2f", cor_df$r)
+    ),
+    collapse = ", "
+  )
+  
+  # -----------------------------
+  # 3. Plot-Format
+  # -----------------------------
+  plot_data_long <- plot_data %>%
+    select(-absolute_diff) %>%
+    pivot_longer(cols = c("high", "low"),
+                 names_to = "hilo",
+                 values_to = "mean") %>%
+    mutate(
+      hilo = str_to_title(hilo),
+      hilo = forcats::fct_rev(hilo),
+      trgt_fct = case_when(
+        str_detect(prejudice_target, "Lib") ~ "Liberal",
+        str_detect(prejudice_target, "Con") ~ "Conservative",
+        TRUE ~ "Other"
+      )
+    )
+  
+  y_max <- max(plot_data_long$mean, na.rm = TRUE)
+  
+  # -----------------------------
+  # 4. Plot
+  # -----------------------------
+  p <- ggplot(plot_data_long,
+              aes(x = hilo, y = mean,
+                  group = interaction(prejudice_target, scale, trgt_fct),
+                  color = trgt_fct,
+                  linetype = scale)) +
+    geom_point(size = 1.5) +
+    geom_line(size = .9) +
+    scale_color_manual(values = c(
+      "Liberal" = "#336699",
+      "Conservative" = "#990000",
+      "Other" = "grey50"
+    )) +
+    scale_x_discrete(expand = c(0.03, 0.03)) +
+    theme_minimal() +
+    
+    geom_segment(aes(x = "Low", xend = "High",
+                     y = y_max + (y_max/20), yend = y_max + (y_max/20)),
+                 inherit.aes = FALSE,
+                 color = "black", size = 1) +
+    
+    annotate(
+      geom = "richtext",
+      x = 1.5,
+      y = y_max + (y_max/10),
+      label = paste0("<i>", cor_label, "</i>"),
+      size = 5,
+      fill = NA,
+      label.color = NA
+    ) +
+    
+    labs(
+      y = "Prejudice",
+      x = "Predictor",
+      color = "Target",
+      linetype = "Scale"
+    ) +
+    theme(legend.position = "bottom")
+  
+  print(p)
+  
+  # -----------------------------
+  # 5. Rückgabe
+  # -----------------------------
+  invisible(list(
+    plot = p,
+    data = plot_data_long,
+    correlations = cor_df
+  ))
+}
+
+
 
 # MAIN TEXT ----
 
@@ -410,62 +616,6 @@ interactions::sim_slopes(lm_sdo.1a_cntrls, pred = sdo, modx = trgt_fct)
 interactions::interact_plot(lm_sdo.1a_no_cntrls, pred = sdo, modx = trgt_fct,interval = T)  
 interactions::interact_plot(lm_sdo.1a_cntrls, pred = sdo, modx = trgt_fct,interval = T)  
 
-## Plot
-r_rwa.lib.1a <- gsub("0.",".",round(cor(ds1_wde$rwa,ds1_wde$prj_agg.lib.grps,use = "pairwise"),2))
-r_rwa.con.1a <- gsub("0.",".",round(cor(ds1_wde$rwa,ds1_wde$prj_agg.con.grps,use = "pairwise"),2))
-r_sdo.lib.1a <- gsub("0.",".",round(cor(ds1_wde$sdo,ds1_wde$prj_agg.lib.grps,use = "pairwise"),2))
-r_sdo.con.1a <- gsub("0.",".",round(cor(ds1_wde$sdo,ds1_wde$prj_agg.con.grps,use = "pairwise"),2))
-
-lm_dat.1a %>%
-  pivot_longer(cols = c("rwa","sdo"),
-               names_to = "scale",
-               values_to = "score") %>%
-  mutate(
-    scale = forcats::fct_recode(scale, "RWA" = "rwa","SDO"="sdo"),
-    trgt_fct = case_when(str_detect(trgt_fct,"con.grps") ~ "Conservative",
-                         str_detect(trgt_fct,"lib.grps") ~ "Liberal")
-    ) %>%
-  ggplot(aes(y = prj_mean, x = score, color = trgt_fct, linetype = scale)) +
-  geom_smooth(se = FALSE, method = lm, size = 0.9) + 
-  ggtitle("Study 1a") +
-  scale_color_manual(values = c(
-    "Liberal" = "#336699",  
-    "Conservative" = "#990000")) +
-  labs(y = "Prejudice", x = "Predictor", color = "Target",linetype = "Scale") +
-  theme_minimal() +
-  theme(legend.position = "bottom",
-        plot.title = element_text(hjust = 0.5, face = "bold")) +
-  annotate(geom = "richtext", x = 0, y = -0.4, 
-           label = paste0("<i>r<sub>RWA</sub></i> =",r_rwa.con.1a),
-           hjust = 0,
-           size = 4, 
-           fill = NA, 
-           label.color = NA,
-           colour = "#990000") +
-  annotate(geom = "richtext", x = 0, y = -0.5, 
-           label = paste0("<i>r<sub>SDO</sub></i>",r_sdo.con.1a),
-           hjust = 0,
-           size = 4, 
-           fill = NA, 
-           label.color = NA,
-           colour = "#990000") +
-  annotate(geom = "richtext", x = 0, y = .5, 
-           label = paste0("<i>r<sub>RWA</sub></i> =",r_rwa.lib.1a),
-           hjust = 0,
-           size = 4, 
-           fill = NA, 
-           label.color = NA,
-           colour = "#336699") +
-  annotate(geom = "richtext", x = 0, y = 0.4, 
-           label = paste0("<i>r<sub>SDO</sub></i>",r_sdo.lib.1a),
-           hjust = 0,
-           size = 4, 
-           fill = NA, 
-           label.color = NA,
-           colour = "#336699")
-
-
-
 ## 2. Comparing within- and between-target variance ----
 
 #function
@@ -509,9 +659,6 @@ sjPlot::tab_model(mod_rwa_1a, show.std = T,show.est = F)
 sjPlot::tab_model(mod_sdo_1a, show.std = T,show.est = F)
 
 ## Study 2 ----
-
-
-## Study 1 ----
 
 ### descriptives ----
 
@@ -638,62 +785,6 @@ interactions::sim_slopes(lm_sdo.1b_cntrls, pred = sdo, modx = trgt_fct)
 interactions::interact_plot(lm_sdo.1b_no_cntrls, pred = sdo, modx = trgt_fct,interval = T)  
 interactions::interact_plot(lm_sdo.1b_cntrls, pred = sdo, modx = trgt_fct,interval = T)  
 
-## Plot
-r_rwa.lib.1b <- gsub("0.",".",round(cor(ds2_wde$rwa,ds2_wde$prj_agg.lib.grps,use = "pairwise"),2))
-r_rwa.con.1b <- gsub("0.",".",round(cor(ds2_wde$rwa,ds2_wde$prj_agg.con.grps,use = "pairwise"),2))
-r_sdo.lib.1b <- gsub("0.",".",round(cor(ds2_wde$sdo,ds2_wde$prj_agg.lib.grps,use = "pairwise"),2))
-r_sdo.con.1b <- gsub("0.",".",round(cor(ds2_wde$sdo,ds2_wde$prj_agg.con.grps,use = "pairwise"),2))
-
-lm_dat.1b %>%
-  pivot_longer(cols = c("rwa","sdo"),
-               names_to = "scale",
-               values_to = "score") %>%
-  mutate(
-    scale = forcats::fct_recode(scale, "RWA" = "rwa","SDO"="sdo"),
-    trgt_fct = case_when(str_detect(trgt_fct,"con.grps") ~ "Conservative",
-                         str_detect(trgt_fct,"lib.grps") ~ "Liberal")
-  ) %>%
-  ggplot(aes(y = prj_mean, x = score, color = trgt_fct, linetype = scale)) +
-  geom_smooth(se = FALSE, method = lm, size = 0.9) + 
-  ggtitle("Study 1b") +
-  scale_color_manual(values = c(
-    "Liberal" = "#336699",  
-    "Conservative" = "#990000")) +
-  labs(y = "Prejudice", x = "Predictor", color = "Target",linetype = "Scale") +
-  theme_minimal() +
-  theme(legend.position = "bottom",
-        plot.title = element_text(hjust = 0.5, face = "bold")) +
-  annotate(geom = "richtext", x = 0, y = -0.4, 
-           label = paste0("<i>r<sub>RWA</sub></i> =",r_rwa.con.1b),
-           hjust = 0,
-           size = 4, 
-           fill = NA, 
-           label.color = NA,
-           colour = "#990000") +
-  annotate(geom = "richtext", x = 0, y = -0.5, 
-           label = paste0("<i>r<sub>SDO</sub></i>",r_sdo.con.1b),
-           hjust = 0,
-           size = 4, 
-           fill = NA, 
-           label.color = NA,
-           colour = "#990000") +
-  annotate(geom = "richtext", x = 0, y = .5, 
-           label = paste0("<i>r<sub>RWA</sub></i> =",r_rwa.lib.1b),
-           hjust = 0,
-           size = 4, 
-           fill = NA, 
-           label.color = NA,
-           colour = "#336699") +
-  annotate(geom = "richtext", x = 0, y = 0.4, 
-           label = paste0("<i>r<sub>SDO</sub></i>",r_sdo.lib.1b),
-           hjust = 0,
-           size = 4, 
-           fill = NA, 
-           label.color = NA,
-           colour = "#336699")
-
-
-
 ## 2. Comparing within- and between-target variance ----
 
 #function
@@ -735,6 +826,95 @@ bootstrap_icc(mod_sdo_1b,iterations = 1000,type = "parametric")
 
 sjPlot::tab_model(mod_rwa_1b, show.std = T,show.est = F)
 sjPlot::tab_model(mod_sdo_1b, show.std = T,show.est = F)
+
+# FIGURE 2 ----
+
+plot_int_prd.trgt(data = ds1_wde,
+                  id_var = "case",
+                  pred_vars   = c("rwa","sdo"),
+                  prj_targets = c("prj_agg.con.grps","prj_agg.lib.grps"),
+                  title = "Study 1")
+
+plot_int_prd.trgt(data = ds2_wde,
+                  id_var = "case",
+                  pred_vars   = c("rwa","sdo"),
+                  prj_targets = c("prj_agg.con.grps","prj_agg.lib.grps"),
+                  title = "Study 2")
+
+plot_trgt_means(
+  data = ds1_wde,
+  predictors = c("rwa", "sdo"),
+  prejudice = prj_all.grps.1a,
+  pred_split = "median"
+)
+
+plot_trgt_means(
+  data = ds2_wde,
+  predictors = c("rwa", "sdo"),
+  prejudice = prj_all.grps.1b,
+  pred_split = "median"
+)
+
+
+#merge single plots to one
+fig2 <-
+  ggarrange(
+  #correlations 1a
+  plot_int_prd.trgt(data = ds1_wde,
+                    id_var = "case",
+                    pred_vars   = c("rwa","sdo"),
+                    prj_targets = c("prj_agg.con.grps","prj_agg.lib.grps"),
+                    title = "Study 1"
+                    ) + rremove("ylab"),
+  
+  #correlations 1b
+  plot_int_prd.trgt(data = ds2_wde,
+                    id_var = "case",
+                    pred_vars   = c("rwa","sdo"),
+                    prj_targets = c("prj_agg.con.grps","prj_agg.lib.grps"),
+                    title = "Study 2"
+                    )+ rremove("ylab"),
+  
+  #prejudice means 1a
+  plot_trgt_means(
+    data = ds1_wde,
+    predictors = c("rwa", "sdo"),
+    prejudice = prj_all.grps.1a,
+    pred_split = "median"
+  )$p + rremove("xlab")+rremove("ylab"),
+  
+  #prejudice means 1b
+  plot_trgt_means(
+    data = ds2_wde,
+    predictors = c("rwa", "sdo"),
+    prejudice = prj_all.grps.1b,
+    pred_split = "median"
+  )$p + rremove("xlab")+rremove("ylab"),
+  
+  common.legend = T, 
+  ncol = 2,
+  nrow = 2,
+  align = "v",
+  labels = c(
+    "A","A"
+    ,"B","B"
+  ),
+  legend = "top"
+)
+  
+fig2 <- 
+  annotate_figure(fig2, left = text_grob("Prejudice", rot = 90),
+                           bottom = text_grob("Predictor"))
+fig2 <- 
+  annotate_figure(fig2, bottom = text_grob(
+  paste("A: Correlations of RWA and SDO (the \"mirror-image\" pattern) with averaged scores (i.e., between-target variance removed) of \n      liberal and conservative prejudice target groups",
+        "B: Correlation between high/low RWA/SDO subsample for prejudice ratings (between target variance is considered)",
+        sep = "\n"),
+  face = "italic",hjust = 0, x = unit(5.5,"pt")))
+
+
+fig2
+ggsave(file = "./4_plots/figure2.jpeg",width = 10, height = 10)
 
 # SUPPLEMENTARY MATERIALS ----
 
