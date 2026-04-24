@@ -916,7 +916,60 @@ fig2 <-
 fig2
 ggsave(file = "./4_plots/figure2.jpeg",width = 10, height = 10)
 
-# SUPPLEMENTARY MATERIALS ----
+# TABLE 1 ----
+
+set.seed(123)
+
+bind_rows(
+  #study 1a model RWA
+  full_join(
+    bootstrap_icc(model = mod_rwa_1a,iterations = 1000,type = "parametric")[c(5:7),c(1,4)] %>%
+      rownames_to_column(var = "random_fct") %>%
+      mutate(Study = "Study 1a",
+             across(where(is.numeric),~round(.,2)),
+             random_fct = str_to_upper(str_remove_all(random_fct,"ICC_")),
+             random_fct = str_replace(random_fct,"RWA","PREDICTOR")
+             ) %>%
+      rename("Model RWA ICC" = "observed","Model RWA 95CI perc" = "CI_perc","Random Factor" = "random_fct") %>%
+      select(4,1:3),
+    
+    #study 1a model SDO
+    bootstrap_icc(model = mod_sdo_1a,iterations = 1000,type = "parametric")[c(5:7),c(1,4)] %>%
+      rownames_to_column(var = "random_fct") %>%
+      mutate(Study = "Study 1a",
+             across(where(is.numeric),~round(.,2)),
+             random_fct = str_to_upper(str_remove_all(random_fct,"ICC_")),
+             random_fct = str_replace(random_fct,"SDO","PREDICTOR")
+      ) %>%
+      rename("Model SDO ICC" = "observed","Model SDO 95CI perc" = "CI_perc","Random Factor" = "random_fct") %>%
+      select(4,1:3)
+  ),
+  #study 1b model RWA
+  full_join(
+    bootstrap_icc(model = mod_rwa_1b,iterations = 1000,type = "parametric")[c(5:7),c(1,4)] %>%
+      rownames_to_column(var = "random_fct") %>%
+      mutate(Study = "Study 1b",
+             across(where(is.numeric),~round(.,2)),
+             random_fct = str_to_upper(str_remove_all(random_fct,"ICC_")),
+             random_fct = str_replace(random_fct,"RWA","PREDICTOR")
+      ) %>%
+      rename("Model RWA ICC" = "observed","Model RWA 95CI perc" = "CI_perc","Random Factor" = "random_fct") %>%
+      select(4,1:3),
+    
+    #study 1b model SDO
+    bootstrap_icc(model = mod_sdo_1b,iterations = 1000,type = "parametric")[c(5:7),c(1,4)] %>%
+      rownames_to_column(var = "random_fct") %>%
+      mutate(Study = "Study 1b",
+             across(where(is.numeric),~round(.,2)),
+             random_fct = str_to_upper(str_remove_all(random_fct,"ICC_")),
+             random_fct = str_replace(random_fct,"SDO","PREDICTOR")
+      ) %>%
+      rename("Model SDO ICC" = "observed","Model SDO 95CI perc" = "CI_perc","Random Factor" = "random_fct") %>%
+      select(4,1:3)
+  )
+)
+
+
 
 ### PARTIAL CORRELATIONS -----
 partial <- expand_grid(
