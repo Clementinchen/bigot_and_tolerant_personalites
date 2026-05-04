@@ -92,17 +92,17 @@ ess4_raw <-
     trad_4       = 7  - trad_4,
     trad_5       = 7  - trad_5,
     
-    prj_immi_1   = 11 - prj_immi_1,
-    prj_immi_2   = 11 - prj_immi_2,
-    prj_immi_3   = 11 - prj_immi_3,
+    prj_immi_1   = 10 - prj_immi_1,
+    prj_immi_2   = 10 - prj_immi_2,
+    prj_immi_3   = 10 - prj_immi_3,
     
     prj_unempl_1 = 6  - prj_unempl_1,
     
     prj_wmn_1    = 6  - prj_wmn_1,
     prj_wmn_2    = 6  - prj_wmn_2,
     
-    prj_age20    = 11 - prj_age20,
-    prj_age70    = 11 - prj_age70
+    prj_age20    = 10 - prj_age20,
+    prj_age70    = 10 - prj_age70
   )
 
 ### alphas ----

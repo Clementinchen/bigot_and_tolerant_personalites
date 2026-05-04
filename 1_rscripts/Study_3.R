@@ -3,49 +3,80 @@ library(tidyverse)
 # DATA WRANGLING ####
 
 #wave 9 (2018)
-ess9 <- haven::read_sav('./0_data/european_social_survey_wave_9_2018.sav')
-cdbk_3 <- openxlsx::read.xlsx("./0_data/three_challenges_codebook.xlsx", sheet = 4)
+ess9_raw <- haven::read_sav('./0_data/european_social_survey_wave_9_2018.sav')
+cdbk_3   <- openxlsx::read.xlsx("./0_data/collective_nature_of_pejudice_codebook.xlsx", sheet = 4)
 
 
-ess9 <- ess9 %>%
+ess9_raw <- ess9_raw %>%
   janitor::clean_names()
 
 
-#select wave 9
+ess9_raw <- 
+  ess9_raw %>%
+  select(any_of(cdbk_3$ess_variable_name)) %>%
+  mutate(
+    region_lbl  = as_factor(region,  levels = "label"),
+    region_cde  = as_factor(region,  levels = "value"),
+    cntry_lbl  = as_factor(cntry,  levels = "label"),
+    cntry_cde  = as_factor(cntry,  levels = "value"),
+    gndr       = as_factor(gndr,   levels = "label"), .keep = "unused")
 
-ess9 <- 
-  ess9 %>%
-  select(all_of(
-    cdbk_3 %>% pull(variable_name))
+# rename variables according to codebook
+ess9_raw <- 
+  ess9_raw %>%
+  rename(any_of(
+    setNames(
+      cdbk_3$ess_variable_name,
+      cdbk_3$variable_label
+    ))
   )
 
+# merge education variables into one variables
+# code eisced 
+ess9_raw <- 
+  ess9_raw %>%
+  mutate(
+    lrscale = as.numeric(lrscale),
+    education_eisced_num = as_factor(education_eisced, levels = "value"),
+    education_eisced     = as_factor(education_eisced, levels = "label"),
+    across(starts_with(c("trad_","prj_")),~as.numeric(.)),
+    
+    region_cde = as.factor(region_cde),
+    region_lbl = as.factor(region_lbl),
+    region_lbl = forcats::fct_relabel(
+      region_lbl,
+      janitor::make_clean_names
+    ),
+    region_lbl = case_when(region_lbl == "x" ~ NA,
+                       TRUE ~ region_lbl),
+    idno = paste0(cntry_cde,"_",idno)
+    
+  )
 
-## Clean Variables ----
+#variable type numeric
 
-ess9 <- 
-  ess9 %>%
-  mutate(cntry_id   = haven::as_factor(cntry,  levels = "value"),
-         region_id  = haven::as_factor(region, levels = "value"),
-         cntry_lbl  = haven::as_factor(cntry,  levels = "label"),
-         region_lbl = haven::as_factor(region, levels = "label"),
-         gndr       = haven::as_factor(gndr,   levels = "label"),
-         eisced     = as.numeric(haven::as_factor(eisced, levels = "value")),
-         eisced     = case_when(eisced > 7 | eisced < 1 ~ NA,
-                                TRUE ~ eisced),
-         across(c(lrscale,
-                  ipfrule,ipstrgv,ipbhprp,imptrad,impsafe,
-                  freehms,hmsacld,hmsfmlsh,
-                  imdfetn,impcntr,imbgeco,imwbcnt,imueclt), ~ as.numeric(.)),
-         ipfrule  =  7 - ipfrule,
-         ipstrgv  =  7 - ipstrgv,
-         ipbhprp  =  7 - ipbhprp,
-         imptrad  =  7 - imptrad,
-         impsafe  =  7 - impsafe,
-         hmsfmlsh =  6 - hmsfmlsh,
-         imbgeco  = 11 - imbgeco,
-         imueclt  = 11 - imueclt,
-         imwbcnt  = 11 - imwbcnt,
-         .keep = "unused")
+ess9_raw %>%
+  mutate(across(cdbk_3[cdbk_3$var_type == "numeric","variable_label"],as.numeric))
+
+## Scales ----
+
+### Recoding ----
+
+ess9_raw <- 
+  ess9_raw %>%
+  mutate(
+    trad_1       = 7  - trad_1,
+    trad_2       = 7  - trad_2,
+    trad_3       = 7  - trad_3,
+    trad_4       = 7  - trad_4,
+    trad_5       = 7  - trad_5,
+    
+    prj_immi_1   = 10 - prj_immi_1,
+    prj_immi_2   = 10 - prj_immi_2,
+    prj_immi_3   = 10 - prj_immi_3,
+
+    prj_gay_3    = 6 - prj_gay_3,
+  )
 
 # SCALES ----
 
@@ -58,23 +89,24 @@ ess9 <-
 #imptrad = Important to follow traditions and customs
 #impsafe = Important to live in secure and safe surroundings
 
-trd.itms  <- c("ipfrule","ipstrgv","ipbhprp","imptrad","impsafe")
+
+trad.itms  <- paste0("trad_",seq(1:5))
 
 
-psych::fa.parallel(ess9 %>%
-                     select(all_of(trd.itms)))
+psych::fa.parallel(ess9_raw %>%
+                     select(all_of(trad.itms)))
 
-fa_trd <- psych::fa(ess9 %>%
-                    select(all_of(trd.itms)), 
+fa_trad <- psych::fa(ess9_raw %>%
+                    select(all_of(trad.itms)), 
                     nfactors = 1, 
                     rotate = "oblimin", 
                     fm = "ml")
 
-print(fa_trd$loadings, cutoff = 0.3)
+print(fa_trad$loadings, cutoff = 0.3)
 
-psych::alpha(ess9[trd.itms])
+psych::alpha(ess9_raw[trad.itms])
 
-ess9$trd     <- rowMeans(ess9[trd.itms],na.rm = T)
+ess9_raw$trad     <- rowMeans(ess9_raw[trad.itms],na.rm = T)
 
 ## Anti-Gay Attitudes ----
 
@@ -82,13 +114,13 @@ ess9$trd     <- rowMeans(ess9[trd.itms],na.rm = T)
 #hmsacld  = Gay and lesbian couples right to adopt children (reversed)
 #hmsfmlsh = Ashamed if close family member gay or lesbian
 
-anti_gay.itms     <- c("freehms","hmsacld","hmsfmlsh")
+anti_gay.itms <- paste0("prj_gay_",seq(1:3))
 
-psych::fa.parallel(ess9 %>%
+psych::fa.parallel(ess9_raw %>%
                      select(all_of(anti_gay.itms)))
 
 fa_anti_gay <- 
-  psych::fa(ess9 %>%
+  psych::fa(ess9_raw %>%
               select(all_of(anti_gay.itms)), 
             nfactors = 1, 
             rotate = "oblimin", 
@@ -96,14 +128,11 @@ fa_anti_gay <-
 
 print(fa_anti_gay$loadings, cutoff = 0.3)
 
-psych::alpha(ess9[anti_gay.itms])
+psych::alpha(ess9_raw[anti_gay.itms])
 
-ess9$anti_gay     <- rowMeans(ess9[anti_gay.itms], na.rm = T)
+ess9_raw$anti_gay     <- rowMeans(ess9_raw[anti_gay.itms], na.rm = T)
 
 ## Anti-Immigrant Attitudes ----
-
-#imdfetn = Allow many/few immigrants of different race/ethnic group from majority
-#impcntr = Allow many/few immigrants from poorer countries outside Europe
 
 #imbgeco = Immigration bad or good for country's economy
 #imueclt = Country's cultural life undermined or enriched by immigrants
@@ -111,9 +140,7 @@ ess9$anti_gay     <- rowMeans(ess9[anti_gay.itms], na.rm = T)
 
 
 ### anti_immigrant ----
-anti_mig.itms     <- c("imbgeco","imueclt","imwbcnt"
-                       #,"imdfetn","impcntr"
-                       )
+anti_mig.itms     <- c("imbgeco","imueclt","imwbcnt")
 
 psych::fa.parallel(ess9 %>%
                      select(all_of(anti_mig.itms)))
@@ -137,8 +164,8 @@ ess9$anti_mig     <- rowMeans(ess9[anti_mig.itms],na.rm = T)
 ess9 <- 
   ess9 %>%
   group_by(cntry_lbl, region_id) %>%
-  mutate(rgn_lvl_trd      = mean(trd, na.rm = T),
-         cwc_trd          = trd - rgn_lvl_trd,
+  mutate(rgn_lvl_trad      = mean(trad, na.rm = T),
+         cwc_trad          = trad - rgn_lvl_trad,
          rgn_lvl_gay_att  = mean(anti_gay, na.rm = T),
          cwc_anti_gay     = anti_gay  - rgn_lvl_gay_att,
          #rgn_lvl_mig_maj  = mean(mig_maj, na.rm = T),
@@ -157,7 +184,7 @@ ess9 <-
          #cntry_lvl_mig_maj  = mean(mig_maj, na.rm = T),
          #cntry_lvl_mig_enr  = mean(mig_enr, na.rm = T),
          cntry_lvl_anti_mig = mean(anti_mig,na.rm = T),
-         cntry_lvl_trd      = mean(trd, na.rm = T)) %>%
+         cntry_lvl_trad      = mean(trad, na.rm = T)) %>%
   ungroup()
 
 # CENTERING ----
@@ -169,7 +196,7 @@ ess9 <-
 # CORRELATIONS ####
 
 ess9 %>%
-  select(trd,lrscale,anti_gay,anti_mig,
+  select(trad,lrscale,anti_gay,anti_mig,
          rgn_lvl_gay_att,rgn_lvl_anti_mig) %>%
   correlation::correlation(p_adjust = "bonferroni") %>%
   data.frame() %>%
@@ -196,9 +223,9 @@ ess9 %>%
 
 # ICCs ----
 
-null_trd <- lmerTest::lmer(trd ~ 1 + (1|region_id), data = ess9, REML = F)
-summary(null_trd)
-performance::icc(null_trd)
+null_trad <- lmerTest::lmer(trad ~ 1 + (1|region_id), data = ess9, REML = F)
+summary(null_trad)
+performance::icc(null_trad)
 
 null_anti_gay <- lmerTest::lmer(anti_gay ~ 1 + (1|region_id), data = ess9, REML = F)
 summary(null_anti_gay)
@@ -214,18 +241,18 @@ performance::icc(null_mig)
 
 mlm_anti_gay_5_no_cntrls <- 
   lmerTest::lmer(anti_gay ~ 
-                   cwc_trd + cwc_anti_mig + #Individual level
+                   cwc_trad + cwc_anti_mig + #Individual level
                    rgn_lvl_anti_mig.gmc +       #Context level
-                   (cwc_trd + cwc_anti_mig|region_id), #Random effects
+                   (cwc_trad + cwc_anti_mig|region_id), #Random effects
                  data = ess9, REML = F)
 
 summary(mlm_anti_gay_5_no_cntrls)
 
 mlm_anti_gay_5_cntrls <- 
   lme4::lmer(anti_gay ~ 
-               cwc_trd + cwc_anti_mig + #Individual level
+               cwc_trad + cwc_anti_mig + #Individual level
                rgn_lvl_anti_mig.gmc +       #Context level
-               (cwc_trd + cwc_anti_mig|region_id) + #Random effects
+               (cwc_trad + cwc_anti_mig|region_id) + #Random effects
                lrscale + agea + gndr + eisced, #controls
              data = ess9, REML = F)
 
@@ -240,8 +267,8 @@ sjPlot::tab_model(mlm_anti_gay_5_cntrls,mlm_anti_gay_5_no_cntrls,
                   show.re.var = F,
                   show.ngroups = TRUE,
                   collapse.se = T
-                  #terms = c("cwc_trd","cwc_anti_mig","rgn_lvl_anti_mig.gmc"),
-                  #pred.labels = c("trd","Anti-Immigrant: Individual","Anti-Immigrant: Regional"),
+                  #terms = c("cwc_trad","cwc_anti_mig","rgn_lvl_anti_mig.gmc"),
+                  #pred.labels = c("trad","Anti-Immigrant: Individual","Anti-Immigrant: Regional"),
                   #dv.labels = "Model: Anti-Gay Attitudes"
                   ,file = "./2_tables/25_03_06_anti_gay.html"
                   )
@@ -255,18 +282,18 @@ performance::check_convergence(mlm_anti_gay_5_cntrls)
 ## Anti-Immigrant Prejudice ----
 mlm_anti_mig_5_no_cntrls <- 
   lmerTest::lmer(anti_mig ~ 
-                   cwc_trd + cwc_anti_gay + #Individual level
+                   cwc_trad + cwc_anti_gay + #Individual level
                    rgn_lvl_gay_att.gmc +        #Context level
-                   (cwc_trd + cwc_anti_gay|region_id), #random effects
+                   (cwc_trad + cwc_anti_gay|region_id), #random effects
                  data = ess9, REML = F)
 
 summary(mlm_anti_mig_5_no_cntrls)
 
 mlm_anti_mig_5_cntrls <- 
   lme4::lmer(anti_mig ~ 
-               cwc_trd + cwc_anti_gay + #Individual level
+               cwc_trad + cwc_anti_gay + #Individual level
                rgn_lvl_gay_att.gmc +        #Context level
-               (cwc_trd + cwc_anti_gay|region_id) + #Random effects
+               (cwc_trad + cwc_anti_gay|region_id) + #Random effects
                lrscale + agea + eisced + gndr, #controls
              data = ess9)
 
@@ -282,14 +309,14 @@ sjPlot::tab_model(mlm_anti_mig_5_cntrls,mlm_anti_mig_5_no_cntrls,
                   show.re.var = F,
                   show.ngroups = TRUE,
                   collapse.se = T,
-                  #terms = c("cwc_trd",
+                  #terms = c("cwc_trad",
                   #"cwc_anti_gay",
                   #"rgn_lvl_gay_att.gmc",
                   #"lrscale",
                   #"agea",
                   #"edu_num",
                   #"gndr"),
-                  #pred.labels = c("trd",
+                  #pred.labels = c("trad",
                   #                "Anti-Gay: Individual",
                   #                "Anti-Gay: Regional",
                   #                "Political Self-Placement\n[0(left) - 10(right)]",
@@ -319,28 +346,28 @@ mlm_anti_gay_0 <-
 
 mlm_anti_gay_1 <- 
   lmerTest::lmer(anti_gay ~ 
-                   cwc_trd +
+                   cwc_trad +
                    (1|region_id), #Random effects
                  data = ess9, REML = F)
 
 mlm_anti_gay_2 <- 
   lmerTest::lmer(anti_gay ~ 
-                   cwc_trd + cwc_anti_mig +
+                   cwc_trad + cwc_anti_mig +
                    (1|region_id), #Random effects
                  data = ess9, REML = F)
 
 mlm_anti_gay_3 <- 
   lmerTest::lmer(anti_gay ~ 
-                   cwc_trd + cwc_anti_mig +
+                   cwc_trad + cwc_anti_mig +
                    rgn_lvl_anti_mig.gmc + 
-                   (cwc_trd + cwc_anti_mig|region_id), #Random effects
+                   (cwc_trad + cwc_anti_mig|region_id), #Random effects
                  data = ess9, REML = F)
 
 mlm_anti_gay_4 <- 
   lmerTest::lmer(anti_gay ~ 
-                   cwc_trd + cwc_anti_mig +
+                   cwc_trad + cwc_anti_mig +
                    rgn_lvl_anti_mig.gmc + 
-                   (cwc_trd + cwc_anti_mig|region_id) + #Random effects
+                   (cwc_trad + cwc_anti_mig|region_id) + #Random effects
                    lrscale + agea + eisced + gndr, #controls
                  data = ess9, REML = F)
 
@@ -368,28 +395,28 @@ mlm_anti_mig_0 <-
 
 mlm_anti_mig_1 <- 
   lme4::lmer(anti_mig ~ 
-               cwc_trd + 
+               cwc_trad + 
                (1|region_id),#Random effects
              data = ess9, REML = F)
 
 mlm_anti_mig_2 <- 
   lme4::lmer(anti_mig ~ 
-               cwc_trd + cwc_anti_gay + #Individual level
+               cwc_trad + cwc_anti_gay + #Individual level
                (1|region_id), #Random effects
              data = ess9, REML = F)
 
 mlm_anti_mig_3 <- 
   lme4::lmer(anti_mig ~ 
-               cwc_trd + cwc_anti_gay + #Individual level
+               cwc_trad + cwc_anti_gay + #Individual level
                rgn_lvl_gay_att.gmc +        #Context level
-               (cwc_trd + cwc_anti_gay|region_id),#Random effects
+               (cwc_trad + cwc_anti_gay|region_id),#Random effects
              data = ess9, REML = F)
 
 mlm_anti_mig_4 <- 
   lme4::lmer(anti_mig ~ 
-               cwc_trd + cwc_anti_gay + #Individual level
+               cwc_trad + cwc_anti_gay + #Individual level
                rgn_lvl_gay_att.gmc +        #Context level
-               (cwc_trd + cwc_anti_gay|region_id) +#Random effects
+               (cwc_trad + cwc_anti_gay|region_id) +#Random effects
                lrscale + agea + eisced + gndr, #controls
              data = ess9, REML = F)
 
