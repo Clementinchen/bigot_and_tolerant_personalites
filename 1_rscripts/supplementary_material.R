@@ -1144,6 +1144,35 @@ cntry_corrs(data = ess4_ana,
 
 ### Table C1 ----
 
+tab_demo_3 <- 
+  bind_rows(
+  ess9_ana %>%
+    janitor::tabyl(gndr) %>%
+    filter(!percent == 0) %>%
+    rename("Response" = "gndr") %>%
+    mutate(variable = "Gender"),
+  
+  ess9_ana %>%
+    janitor::tabyl(education_eisced) %>%
+    filter(!percent == 0) %>%
+    select(-valid_percent) %>%
+    rename("Response" = "education_eisced") %>%
+    mutate(variable = "Education")
+)
+
+bind_rows(
+  ess9_ana %>%
+    select(age,lrscale) %>%
+    pivot_longer(cols = 1:2,names_to = "variable") %>% filter(complete.cases(.)) %>%
+    group_by(variable) %>%
+    summarise(n = n(),mean = mean(value),sd = sd(value),median = median(value)),
+  tab_demo_3
+) %>%
+  sjPlot::tab_df()
+
+
+### Table C2 ----
+
 cdbk_3 %>%
   filter(scale == "Traditionalism") %>%
   select(full_item,coding) %>%
@@ -1153,7 +1182,7 @@ cdbk_3 %>%
                                     select(introduction) %>% distinct() %>% pull(introduction)),
                  show.footnote = T)
 
-### Table C2 ----
+### Table C3 ----
 
 cdbk_3 %>%
   filter(str_detect(scale,"Prejudice")) %>%
@@ -1168,7 +1197,7 @@ cdbk_3 %>%
                                   )),
                  show.footnote = T)
 
-### Table C3 ----
+### Table C4 ----
 
 ess9_ana %>%
   select(trad,lrscale,anti_mig,anti_gay) %>%
@@ -1194,7 +1223,7 @@ psych::alpha(ess9_raw[trad.itms])
 psych::alpha(ess9_raw[anti_mig.itms])
 psych::alpha(ess9_raw[anti_gay.itms])
 
-### Table C4 ----
+### Table C5 ----
 
 ess9_ana %>%
   select(trad,lrscale,anti_mig,anti_gay,
@@ -1216,7 +1245,7 @@ ess9_ana %>%
   sjPlot::tab_df()
 
 
-### Table C5 ----
+### Table C6 ----
 
 cfi_dat3 <- 
   ess9_raw %>%
@@ -1280,7 +1309,7 @@ anova(trd.config,trd.metric)
 anova(trd.metric,trd.scalar)
 
 
-### Table C6 ----
+### Table C7 ----
 # prejudice targets
 
 # Define model
@@ -1328,7 +1357,7 @@ tab_mi_trgt %>%
 anova(trgt.config,trgt.metric)
 anova(trgt.metric,trgt.scalar)
 
-### Table C7 ----
+### Table C8 ----
 
 mlm_anti_mig_5_no_cntrls <- 
   lmerTest::lmer(anti_mig ~ 
@@ -1427,7 +1456,7 @@ performance::check_collinearity(mlm_anti_gay_5_cntrls)
 performance::check_convergence(mlm_anti_gay_5_no_cntrls)
 performance::check_convergence(mlm_anti_gay_5_cntrls)
 
-### Table C8 ----
+### Table C9 ----
 
 mlm_anti_mig_0 <- 
   lme4::lmer(anti_mig ~ 
@@ -1477,7 +1506,7 @@ sjPlot::tab_model(mlm_anti_mig_0,
                   )
 
 
-### Table C9 ----
+### Table C10 ----
 
 mlm_anti_gay_0 <- 
   lmerTest::lmer(anti_gay ~ 
