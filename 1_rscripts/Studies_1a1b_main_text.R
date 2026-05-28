@@ -12,11 +12,11 @@ library(lme4)
 biv_r <- 
   function(data,vars1,vars2,method,missing, ci,p_adjust) {
     res <- data %>% correlation::correlation(select = vars1,
-                                      select2 = vars2,
-                                      method = method,
-                                      missing = missing,
-                                      ci = ci,
-                                      p_adjust = p_adjust)
+                                             select2 = vars2,
+                                             method = method,
+                                             missing = missing,
+                                             ci = ci,
+                                             p_adjust = p_adjust)
     res <- as_tibble(res) %>%
       mutate(Var1 = Parameter1,
              Var2 = Parameter2,
@@ -34,7 +34,7 @@ biv_r <-
                p < .05 ~ "p < .05",
                TRUE ~ "n.s."),
              .keep = "none"
-             )
+      )
     res %>% select(Var1,Var2,N,r,CI,p_scientific,p_star) %>% rename_with(.,~paste0("CI"," (",gsub("^0+([\\.])","",ci),"%",")"),"CI") %>% print(n = nrow(.))
   }
 
@@ -359,7 +359,7 @@ plot_int_prd.trgt <- function(id_var, data, pred_vars, prj_targets, title = NULL
              fill = NA, 
              label.color = NA,
              colour = "#336699")
-
+  
 }
 
 
@@ -861,72 +861,72 @@ plot_trgt_means(
 #merge single plots to one
 fig2 <-
   ggarrange(
-  #correlations 1a
-  plot_int_prd.trgt(data = ds1_wde,
-                    id_var = "case",
-                    pred_vars   = c("rwa","sdo"),
-                    prj_targets = c("prj_agg.con.grps","prj_agg.lib.grps"),
-                    title = "Study 1"
-                    ) + 
-    rremove("ylab") + 
-    labs(colour = "Target Group") + 
-    guides(linetype = guide_legend(override.aes = list(color = "black"))),
-  
-  #correlations 1b
-  plot_int_prd.trgt(data = ds2_wde,
-                    id_var = "case",
-                    pred_vars   = c("rwa","sdo"),
-                    prj_targets = c("prj_agg.con.grps","prj_agg.lib.grps"),
-                    title = "Study 2"
-                    )+ 
-    rremove("ylab") + 
-    labs(colour = "Target Group") +
-    guides(linetype = guide_legend(override.aes = list(color = "black"))),
-  
-  #prejudice means 1a
-  plot_trgt_means(
-    data = ds1_wde,
-    predictors = c("rwa", "sdo"),
-    prejudice = prj_all.grps.1a,
-    pred_split = "median"
-  )$p + 
-    rremove("xlab")+
-    rremove("ylab")+
-    labs(colour = "Target Group")+
-    guides(linetype = guide_legend(override.aes = list(color = "black"))),
-  
-  #prejudice means 1b
-  plot_trgt_means(
-    data = ds2_wde,
-    predictors = c("rwa", "sdo"),
-    prejudice = prj_all.grps.1b,
-    pred_split = "median"
-  )$p +
-    rremove("xlab")+
-    rremove("ylab")+
-    labs(colour = "Target Group")+
-    guides(linetype = guide_legend(override.aes = list(color = "black"))),
-  
-  common.legend = T, 
-  ncol = 2,
-  nrow = 2,
-  align = "v",
-  labels = c(
-    "A","A"
-    ,"B","B"
-  ),
-  legend = "top"
-)
-  
+    #correlations 1a
+    plot_int_prd.trgt(data = ds1_wde,
+                      id_var = "case",
+                      pred_vars   = c("rwa","sdo"),
+                      prj_targets = c("prj_agg.con.grps","prj_agg.lib.grps"),
+                      title = "Study 1"
+    ) + 
+      rremove("ylab") + 
+      labs(colour = "Target Group") + 
+      guides(linetype = guide_legend(override.aes = list(color = "black"))),
+    
+    #correlations 1b
+    plot_int_prd.trgt(data = ds2_wde,
+                      id_var = "case",
+                      pred_vars   = c("rwa","sdo"),
+                      prj_targets = c("prj_agg.con.grps","prj_agg.lib.grps"),
+                      title = "Study 2"
+    )+ 
+      rremove("ylab") + 
+      labs(colour = "Target Group") +
+      guides(linetype = guide_legend(override.aes = list(color = "black"))),
+    
+    #prejudice means 1a
+    plot_trgt_means(
+      data = ds1_wde,
+      predictors = c("rwa", "sdo"),
+      prejudice = prj_all.grps.1a,
+      pred_split = "median"
+    )$p + 
+      rremove("xlab")+
+      rremove("ylab")+
+      labs(colour = "Target Group")+
+      guides(linetype = guide_legend(override.aes = list(color = "black"))),
+    
+    #prejudice means 1b
+    plot_trgt_means(
+      data = ds2_wde,
+      predictors = c("rwa", "sdo"),
+      prejudice = prj_all.grps.1b,
+      pred_split = "median"
+    )$p +
+      rremove("xlab")+
+      rremove("ylab")+
+      labs(colour = "Target Group")+
+      guides(linetype = guide_legend(override.aes = list(color = "black"))),
+    
+    common.legend = T, 
+    ncol = 2,
+    nrow = 2,
+    align = "v",
+    labels = c(
+      "A","A"
+      ,"B","B"
+    ),
+    legend = "top"
+  )
+
 fig2 <- 
   annotate_figure(fig2, left = text_grob("Prejudice", rot = 90),
-                           bottom = text_grob("Predictor"))
+                  bottom = text_grob("Predictor"))
 fig2 <- 
   annotate_figure(fig2, bottom = text_grob(
-  paste("A: Correlations of RWA and SDO (the \"mirror-image\" pattern) with averaged scores (i.e., between-target variance removed) of \n      liberal and conservative prejudice target groups",
-        "B: Correlation between high/low RWA/SDO subsample for prejudice ratings (between target variance is considered)",
-        sep = "\n"),
-  face = "italic",hjust = 0, x = unit(5.5,"pt")))
+    paste("A: Correlations of RWA and SDO (the \"mirror-image\" pattern) with averaged scores (i.e., between-target variance removed) of \n      liberal and conservative prejudice target groups",
+          "B: Correlation between high/low RWA/SDO subsample for prejudice ratings (between target variance is considered)",
+          sep = "\n"),
+    face = "italic",hjust = 0, x = unit(5.5,"pt")))
 
 
 fig2
@@ -945,7 +945,7 @@ bind_rows(
              across(where(is.numeric),~round(.,2)),
              random_fct = str_to_upper(str_remove_all(random_fct,"ICC_")),
              random_fct = str_replace(random_fct,"RWA","PREDICTOR")
-             ) %>%
+      ) %>%
       rename("Model RWA ICC" = "observed","Model RWA 95CI perc" = "CI_perc","Random Factor" = "random_fct") %>%
       select(4,1:3),
     

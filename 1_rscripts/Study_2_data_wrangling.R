@@ -4,25 +4,6 @@ library(tidyverse)
 library(lavaan)
 library(haven)
 
-# FUNCTIONS ####
-
-add_scale_mean_alpha <- function(data, scale_name, items) {
-  
-  # Alpha berechnen und ausgeben
-  alpha_res <- psych::alpha(
-    data %>% dplyr::select(any_of(items))
-  )
-  print(alpha_res$total)
-  
-  # Skalenmittelwert berechnen
-  data[[scale_name]] <- rowMeans(
-    data[, items],
-    na.rm = TRUE
-  )
-  
-  return(data)
-}
-
 # DATA WRANGLING ####
 
 #wave 4 (2018)
@@ -61,6 +42,8 @@ ess4_raw <-
     lrscale = as.numeric(lrscale),
     education_eisced_num = as_factor(education_eisced, levels = "value"),
     education_eisced     = as_factor(education_eisced, levels = "label"),
+    age                  = case_when(age > (median(ess4_raw$age,na.rm = T) + 3*sd(age,na.rm = T)) ~ NA,
+                                     TRUE ~ age),
     across(starts_with(c("trad_","prj_")),~as.numeric(.)),
     
     region = as.factor(region),
@@ -148,4 +131,4 @@ ess4_ana <-
       ~as.numeric(scale(.)),.names = "{sub('raw','scl',col)}")
   )
 
-remove(ess4_raw)
+

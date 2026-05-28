@@ -83,11 +83,11 @@ ess9_raw <-
 ## Traditionalism ----
 
 #Authoritarianism
-#ipfrule = Important to do what is told and follow rules
-#ipstrgv = Important that government is strong and ensures safety
-#ipbhprp = Important to behave properly
-#imptrad = Important to follow traditions and customs
-#impsafe = Important to live in secure and safe surroundings
+#trad_1 = Important to do what is told and follow rules
+#trad_1 = Important that government is strong and ensures safety
+#trad_1 = Important to behave properly
+#trad_1 = Important to follow traditions and customs
+#trad_1 = Important to live in secure and safe surroundings
 
 
 trad.itms  <- paste0("trad_",seq(1:5))
