@@ -2,7 +2,7 @@
 title: "When the Collective Outweighs the Individual: The Collective Nature of Prejudice"
 subtitle: "Appendix"
 author: "Clemens Lindner"
-format: html
+format: docx
 self-contained: true
 editor: visual
 ---

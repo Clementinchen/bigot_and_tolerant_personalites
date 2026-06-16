@@ -1140,6 +1140,43 @@ cntry_corrs(data = ess4_ana,
             split.stat = "median",
             by.country = FALSE) 
 
+### Table B11 ----
+
+#testing models by stepwise including random factor variables and testing two nesting structures
+#target nested in region
+#participant nested in region
+mlm_ess4_m1  <- lmer(prj_rating_scl ~ (1|region/prj_target),                           data = ess4_long)
+mlm_ess4_m2  <- lmer(prj_rating_scl ~ (1|region/prj_target) + (1|idno),                data = ess4_long)
+mlm_ess4_m3  <- lmer(prj_rating_scl ~ (1|region/prj_target) + (1|idno) + (1|trad_raw), data = ess4_long)
+mlm_ess4_m4  <- lmer(prj_rating_scl ~ (1|region/idno),                                 data = ess4_long)
+mlm_ess4_m5  <- lmer(prj_rating_scl ~ (1|region/idno) + (1|prj_target),                data = ess4_long)
+mlm_ess4_m6  <- lmer(prj_rating_scl ~ (1|region/idno) + (1|prj_target) + (1|trad_raw), data = ess4_long)
+
+sjPlot::tab_model(
+  mlm_ess4_m1,
+  mlm_ess4_m2,
+  mlm_ess4_m3,
+  mlm_ess4_m4,
+  mlm_ess4_m5,
+  mlm_ess4_m6,
+  show.ci = F,
+  show.p = F,
+  show.se = T
+  
+)
+
+#iccs
+rownames_to_column(get_iccs(mlm_ess4_m1)[2],"variable") %>% rename("Model 1" = "iccs") %>%
+  full_join(.,rownames_to_column(get_iccs(mlm_ess4_m2)[2],"variable") %>% rename("Model 2" = "iccs")) %>%
+  full_join(.,rownames_to_column(get_iccs(mlm_ess4_m3)[2],"variable") %>% rename("Model 3" = "iccs")) %>%
+  full_join(.,rownames_to_column(get_iccs(mlm_ess4_m4)[2],"variable") %>% rename("Model 4" = "iccs")) %>%
+  full_join(.,rownames_to_column(get_iccs(mlm_ess4_m5)[2],"variable") %>% rename("Model 5" = "iccs")) %>%
+  full_join(.,rownames_to_column(get_iccs(mlm_ess4_m6)[2],"variable") %>% rename("Model 6" = "iccs")) %>%
+  
+  slice(1:2,4:nrow(.),3) %>%
+  sjPlot::tab_df()
+
+
 # Appendix C: Study 3 ----
 
 ### Table C1 ----

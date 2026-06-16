@@ -1,0 +1,15 @@
+library(tidyverse)
+
+d <- haven::read_sav('./0_data/WVS_Cross-National_Wave_7_spss_v6_0.sav')
+cb <- openxlsx::read.xlsx('./0_data/codebook_variables_relevant.xlsx')
+
+d <- as_tibble(d)
+d
+
+d %>%
+  names()
+
+d %>%
+  sjlabelled::label_to_colnames() %>%
+  names()
+
