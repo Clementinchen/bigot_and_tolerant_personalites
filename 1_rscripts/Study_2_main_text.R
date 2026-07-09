@@ -284,10 +284,11 @@ bootstrap_icc <- function(model,
 }
 
 # PREPARE LONG DATA FOR MLM ----
+prj_targets <- c("prj_immigrants","prj_gay","prj_unemployed","prj_women","prj_age20","prj_age70")
 
 ess4_long <- 
   ess4_ana %>% 
-  pivot_longer(cols = c("prj_immigrants_scl","prj_gay_scl","prj_unemployed_scl","prj_women_scl","prj_age20_scl","prj_age70_scl"),
+  pivot_longer(cols = paste0(prj_targets,"_scl"),
                names_to = "prj_target",
                values_to = "prj_rating_scl")
 

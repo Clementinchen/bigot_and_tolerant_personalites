@@ -1,3 +1,21 @@
+# HELPER FUNCTION -----
+
+lin_stretch <- function(x, new_min, new_max) {
+  
+  old_min <- min(x, na.rm = TRUE)
+  old_max <- max(x, na.rm = TRUE)
+  
+  if (old_max == old_min) {
+    stop("Linear streching impossible: values are equal.")
+  }
+  
+  stretched <- new_min +
+    ((x - old_min) * (new_max - new_min)) /
+    (old_max - old_min)
+  
+  return(stretched)
+}
+
 # LIBRARIES ----
 
 library(tidyverse)
@@ -128,7 +146,16 @@ ess4_ana <-
   mutate(
     across(
       c("trad_raw","prj_immigrants_raw","prj_gay_raw","prj_unemployed_raw","prj_women_raw","prj_age20_raw","prj_age70_raw"),
-      ~as.numeric(scale(.)),.names = "{sub('raw','scl',col)}")
+      ~as.numeric(scale(.)),.names = "{sub('raw','scl',col)}"),
+      across(
+      c("trad_raw","prj_immigrants_raw","prj_gay_raw","prj_unemployed_raw","prj_women_raw","prj_age20_raw","prj_age70_raw"),
+      ~lin_stretch(.,new_min = 0,new_max = 1),.names = "{sub('raw','lin',col)}")
   )
+psych::describe(ess4_ana[c("trad_lin","prj_immigrants_lin","prj_gay_lin","prj_unemployed_lin","prj_women_lin","prj_age20_lin","prj_age70_lin")])
 
-
+cor(ess4_ana$prj_immigrants_raw,ess4_ana$prj_immigrants_lin,use = "pairwise")
+cor(ess4_ana$prj_gay_raw,ess4_ana$prj_gay_lin,use = "pairwise")
+cor(ess4_ana$prj_unemployed_raw,ess4_ana$prj_unemployed_lin,use = "pairwise")
+cor(ess4_ana$prj_women_raw,ess4_ana$prj_women_lin,use = "pairwise")
+cor(ess4_ana$prj_age20_raw,ess4_ana$prj_age20_lin,use = "pairwise")
+cor(ess4_ana$prj_age70_raw,ess4_ana$prj_age70_lin,use = "pairwise")
