@@ -65,7 +65,7 @@ ds1_raw <- read.csv(file = './0_data/rwa_sdo_revisited_study_1a.csv',
 
 
 #get codebook
-cdbk_1a <- openxlsx::read.xlsx("./0_data/three_challenges_codebook.xlsx", sheet = 1) %>%
+cdbk_1a <- openxlsx::read.xlsx("./0_data/collective_nature_of_pejudice_codebook.xlsx", sheet = 1) %>%
   mutate(variable = tolower(variable))
 
 
@@ -245,7 +245,7 @@ ds2_raw <- read.csv(file = './0_data/rwa_sdo_revisited_study_1b.csv',
 
 
 #get codebook
-cdbk_1b <- openxlsx::read.xlsx("./0_data/three_challenges_codebook.xlsx", sheet = 2) %>%
+cdbk_1b <- openxlsx::read.xlsx("./0_data/collective_nature_of_pejudice_codebook.xlsx", sheet = 2) %>%
   mutate(variable = tolower(variable))
 
 

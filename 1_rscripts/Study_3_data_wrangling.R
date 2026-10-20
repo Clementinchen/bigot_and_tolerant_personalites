@@ -4,7 +4,7 @@ library(tidyverse)
 
 #wave 9 (2018)
 ess9_raw <- haven::read_sav('./0_data/european_social_survey_wave_9_2018.sav')
-cdbk_3   <- openxlsx::read.xlsx("./0_data/collective_nature_of_pejudice_codebook.xlsx", sheet = 4)
+cdbk_3   <- openxlsx::read.xlsx("./0_data/collective_nature_of_pejudice_codebook.xlsx", sheet = 5)
 
 
 ess9_raw <- ess9_raw %>%

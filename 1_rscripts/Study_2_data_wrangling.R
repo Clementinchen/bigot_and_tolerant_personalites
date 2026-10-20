@@ -1,19 +1,10 @@
 # HELPER FUNCTION -----
 
-lin_stretch <- function(x, new_min, new_max) {
-  
-  old_min <- min(x, na.rm = TRUE)
-  old_max <- max(x, na.rm = TRUE)
-  
+lin_stretch <- function(x, old_min, old_max, new_min = 0, new_max = 1) {
   if (old_max == old_min) {
-    stop("Linear streching impossible: values are equal.")
+    stop("Linear stretching impossible: values are equal.")
   }
-  
-  stretched <- new_min +
-    ((x - old_min) * (new_max - new_min)) /
-    (old_max - old_min)
-  
-  return(stretched)
+  new_min + ((x - old_min) * (new_max - new_min)) / (old_max - old_min)
 }
 
 # LIBRARIES ----
@@ -26,7 +17,7 @@ library(haven)
 
 #wave 4 (2018)
 ess4_raw <- read_sav('./0_data/european_social_survey_wave_4_2008_4.6.sav')
-cdbk_2 <- openxlsx::read.xlsx("./0_data/collective_nature_of_pejudice_codebook.xlsx", sheet = 3)
+cdbk_2 <- openxlsx::read.xlsx("./0_data/collective_nature_of_pejudice_codebook.xlsx", sheet = 4)
 
 
 ## Clean Variables ----
@@ -106,6 +97,39 @@ ess4_raw <-
     prj_age70    = 10 - prj_age70
   )
 
+### rescaling ----
+
+# dokumentierte Skalenendpunkte pro Item — bitte aus deinem Codebook/Table 1 eintragen
+scale_endpoints <- list(
+  trad_1            = c(min = 1, max = 6),
+  trad_2            = c(min = 1, max = 6),
+  trad_3            = c(min = 1, max = 6),
+  trad_4            = c(min = 1, max = 6),
+  trad_5            = c(min = 1, max = 6),
+  prj_immi_1        = c(min = 0, max = 10),
+  prj_immi_2        = c(min = 0, max = 10), 
+  prj_immi_3        = c(min = 0, max = 10), 
+  prj_gay_1         = c(min = 1, max = 5),   
+  prj_unempl_1      = c(min = 1, max = 5),   
+  prj_wmn_1        = c(min = 1, max = 5),
+  prj_wmn_2        = c(min = 1, max = 5),
+  prj_age20         = c(min = 0, max = 10),   
+  prj_age70         = c(min = 0, max = 10)    
+)
+
+ess4_raw <- ess4_raw %>%
+  mutate(
+    across(
+      all_of(names(scale_endpoints)),
+      ~ lin_stretch(
+        .x,
+        old_min = scale_endpoints[[cur_column()]]["min"],
+        old_max = scale_endpoints[[cur_column()]]["max"]
+      ),
+      .names = "{.col}_lin"
+    )
+  )
+
 ### alphas ----
 
 #traditionalism
@@ -113,9 +137,11 @@ psych::alpha(ess4_raw[c("trad_1","trad_2","trad_3","trad_4","trad_5")])
 
 #anti-immigrant attitudes
 psych::alpha(ess4_raw[c("prj_immi_1","prj_immi_2","prj_immi_3")])
+psych::alpha(ess4_raw[c("prj_immi_1_lin","prj_immi_2_lin","prj_immi_3_lin")])
 
 #prejudice against women
 psych::alpha(ess4_raw[c("prj_wmn_1","prj_wmn_2")])
+psych::alpha(ess4_raw[c("prj_wmn_1_lin","prj_wmn_2_lin")])
 
 
 ### scale means ----
@@ -126,16 +152,22 @@ ess4_ana <-
     trad_raw = rowMeans(select(.,c("trad_1","trad_2","trad_3","trad_4","trad_5")),na.rm = TRUE),
     #anti-immigrant
     prj_immigrants_raw = rowMeans(select(.,c("prj_immi_1","prj_immi_2","prj_immi_3")),na.rm = TRUE),
+    prj_immigrants_lin = rowMeans(select(.,c("prj_immi_1_lin","prj_immi_2_lin","prj_immi_3_lin")),na.rm = TRUE),
     #anti-gay
     prj_gay_raw = prj_gay_1,
+    prj_gay_lin = prj_gay_1_lin,
     #unemployed
     prj_unemployed_raw = prj_unempl_1,
+    prj_unemployed_lin = prj_unempl_1_lin,
     #women
     prj_women_raw = rowMeans(select(.,c("prj_wmn_1","prj_wmn_2")),na.rm = TRUE),
+    prj_women_lin = rowMeans(select(.,c("prj_wmn_1_lin","prj_wmn_2_lin")),na.rm = TRUE),
     #people in their 20s
     prj_age20_raw = prj_age20,
+    prj_age20_lin = prj_age20_lin,
     #people over 70
     prj_age70_raw = prj_age70,
+    prj_age70_lin = prj_age70_lin,
     
     .keep = "unused"
   )
@@ -146,16 +178,11 @@ ess4_ana <-
   mutate(
     across(
       c("trad_raw","prj_immigrants_raw","prj_gay_raw","prj_unemployed_raw","prj_women_raw","prj_age20_raw","prj_age70_raw"),
-      ~as.numeric(scale(.)),.names = "{sub('raw','scl',col)}"),
-      across(
-      c("trad_raw","prj_immigrants_raw","prj_gay_raw","prj_unemployed_raw","prj_women_raw","prj_age20_raw","prj_age70_raw"),
-      ~lin_stretch(.,new_min = 0,new_max = 1),.names = "{sub('raw','lin',col)}")
+      ~as.numeric(scale(.)),.names = "{sub('raw','scl',col)}")
   )
-psych::describe(ess4_ana[c("trad_lin","prj_immigrants_lin","prj_gay_lin","prj_unemployed_lin","prj_women_lin","prj_age20_lin","prj_age70_lin")])
+psych::describe(ess4_ana[c("trad_raw","prj_immigrants_lin","prj_gay_lin","prj_unemployed_lin","prj_women_lin","prj_age20_lin","prj_age70_lin")])
 
-cor(ess4_ana$prj_immigrants_raw,ess4_ana$prj_immigrants_lin,use = "pairwise")
-cor(ess4_ana$prj_gay_raw,ess4_ana$prj_gay_lin,use = "pairwise")
-cor(ess4_ana$prj_unemployed_raw,ess4_ana$prj_unemployed_lin,use = "pairwise")
-cor(ess4_ana$prj_women_raw,ess4_ana$prj_women_lin,use = "pairwise")
-cor(ess4_ana$prj_age20_raw,ess4_ana$prj_age20_lin,use = "pairwise")
-cor(ess4_ana$prj_age70_raw,ess4_ana$prj_age70_lin,use = "pairwise")
+
+
+prj_targets <- c("prj_immigrants","prj_gay","prj_unemployed","prj_women","prj_age20","prj_age70")
+

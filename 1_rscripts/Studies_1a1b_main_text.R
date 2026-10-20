@@ -642,19 +642,34 @@ trgt_var(data = ds1_wde,predictor = "sdo",prejudice = prj_all.grps.1a,pred_split
 
 var_decomp_1a <- 
   ds1_wde %>%
-  select(case,rwa,sdo,starts_with("prj.")) %>%
+  select(case,rwa,sdo,polid,starts_with("prj.")) %>%
+  mutate(across(c("rwa","sdo","polid"),~as.numeric(scale(.)))) %>%
   tidyr::pivot_longer(cols = starts_with("prj"),
                       names_to = "target",
                       values_to = "rating") %>%
   filter(complete.cases(.))
 
-mod_rwa_1a = lmer(rating ~ 1 + (1|case) + (1|target) + (1|rwa), data = var_decomp_1a)
-mod_sdo_1a = lmer(rating ~ 1 + (1|case) + (1|target) + (1|sdo), data = var_decomp_1a)
+mod_stdy1_m1 = lmer(rating ~ 1 + (1|case) + (1|target),         data = var_decomp_1a)
+mod_stdy1_m2 = lmer(rating ~ 1 + (1|case) + (1|target) + rwa,   data = var_decomp_1a)
+mod_stdy1_m3 = lmer(rating ~ 1 + (1|case) + (1|target) + sdo,   data = var_decomp_1a)
+mod_stdy1_m4 = lmer(rating ~ 1 + (1|case) + (1|target) + polid, data = var_decomp_1a)
 
-summary(mod_rwa_1a)
-summary(mod_sdo_1a)
+summary(mod_stdy1_m1)
+summary(mod_stdy1_m2)
+summary(mod_stdy1_m3)
+summary(mod_stdy1_m4)
 
-bootstrap_icc(mod_rwa_1a,iterations = 1000,type = "parametric")
+bootstrap_icc(mod_stdy1_m1,iterations = 1000,type = "parametric")
+bootstrap_icc(mod_stdy1_m2,iterations = 100,type = "parametric")
+bootstrap_icc(mod_stdy1_m3,iterations = 100,type = "parametric")
+bootstrap_icc(mod_stdy1_m4,iterations = 100,type = "parametric")
+
+performance::r2(mod_stdy1_m1)
+performance::r2(mod_stdy1_m2)
+performance::r2(mod_stdy1_m3)
+performance::r2(mod_stdy1_m4)
+
+
 bootstrap_icc(mod_sdo_1a,iterations = 1000,type = "parametric")
 
 sjPlot::tab_model(mod_rwa_1a, show.std = T,show.est = F)
@@ -984,3 +999,43 @@ bind_rows(
       select(4,1:3)
   )
 )
+
+
+
+var_decomp_1b <- 
+  ds2_wde %>%
+  select(case, rwa, sdo, polid, starts_with("prj.")) %>%
+  filter(
+    complete.cases(rwa, sdo, polid)
+  ) %>%
+  mutate(
+    rwa  = as.numeric(scale(rwa)),
+    sdo  = as.numeric(scale(sdo)),
+    polid = as.numeric(scale(polid))
+  ) %>%
+  pivot_longer(
+    cols = starts_with("prj."),
+    names_to = "target",
+    values_to = "rating"
+  ) %>%
+  filter(!is.na(rating))
+
+mod_stdy2_m1 = lmer(rating ~ 1 + (1|case) + (1|target),         data = var_decomp_1b)
+mod_stdy2_m2 = lmer(rating ~ 1 + (1|case) + (1|target) + rwa,   data = var_decomp_1b)
+mod_stdy2_m3 = lmer(rating ~ 1 + (1|case) + (1|target) + sdo,   data = var_decomp_1b)
+mod_stdy2_m4 = lmer(rating ~ 1 + (1|case) + (1|target) + polid, data = var_decomp_1b)
+
+summary(mod_stdy2_m1)
+summary(mod_stdy2_m2)
+summary(mod_stdy2_m3)
+summary(mod_stdy2_m4)
+
+bootstrap_icc(mod_stdy2_m1,iterations = 1000,type = "parametric")
+bootstrap_icc(mod_stdy2_m2,iterations = 100,type = "parametric")
+bootstrap_icc(mod_stdy2_m3,iterations = 100,type = "parametric")
+bootstrap_icc(mod_stdy2_m4,iterations = 100,type = "parametric")
+
+performance::r2(mod_stdy2_m1)
+performance::r2(mod_stdy2_m2)
+performance::r2(mod_stdy2_m3)
+performance::r2(mod_stdy2_m4)
